@@ -1,0 +1,71 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Tt]est[Rr]esult*/
+[Rr]elease*/
+[Dd]ebug*/
+[xX]64/
+[xX]86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nuget.props
+*.nuget.targets
+packages/
+*.nupkg
+.nuget/
+
+# Rider/Resharper
+.idea/
+*.DotSettings.user
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+# Visual Studio Code
+.vscode/
+
+# Others
+*.dbmdl
+*.jfm
+*.pdb
+*.opendb
+*.cache
+*.log
+*.svclog
+*.tlog
+*.psess
+*.vsp*
+*.pidb
+*.scc
+*.orig
+
+# IIS Express
+/.vs/config/applicationhost.config
+
+# Coverage
+coverage*/
+*.coverage
+*.coveragexml
+
+# User-specific files
+*.rsuser
+
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Publish outputs
+**/wwwroot/lib/
+app.publish/
+# End of .gitignore
