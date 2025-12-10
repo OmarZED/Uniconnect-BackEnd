@@ -353,24 +353,30 @@ namespace UniConnect.Repository
 
             var claims = new[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.Role.ToString()),
-                new Claim("FirstName", user.FirstName),
-                new Claim("LastName", user.LastName),
-                new Claim("Role", user.Role.ToString()),
-                new Claim("FacultyId", user.FacultyId ?? ""),
-                new Claim("CourseId", user.CourseId ?? ""),
-                new Claim("StudentGroupId", user.StudentGroupId ?? "")
-            };
+        // ? FIXED: Use User ID for Subject and NameIdentifier
+        new Claim(JwtRegisteredClaimNames.Sub, user.Id), // User ID as subject
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        new Claim(ClaimTypes.NameIdentifier, user.Id), // User ID as NameIdentifier
+        new Claim(ClaimTypes.Email, user.Email),
+        new Claim(ClaimTypes.Role, user.Role.ToString()),
+        
+        // Custom claims
+        new Claim("UserId", user.Id), // Explicit UserId claim
+        new Claim("Email", user.Email),
+        new Claim("FirstName", user.FirstName),
+        new Claim("LastName", user.LastName),
+        new Claim("FullName", $"{user.FirstName} {user.LastName}"),
+        new Claim("Role", user.Role.ToString()),
+        new Claim("FacultyId", user.FacultyId ?? ""),
+        new Claim("CourseId", user.CourseId ?? ""),
+        new Claim("StudentGroupId", user.StudentGroupId ?? "")
+    };
 
             var token = new JwtSecurityToken(
                 issuer: _configuration["Jwt:Issuer"],
                 audience: _configuration["Jwt:Audience"],
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(Convert.ToDouble(_configuration["Jwt:ExpiryInMinutes"])),
+                expires: DateTime.UtcNow.AddMinutes(Convert.ToDouble(_configuration["Jwt:ExpiryInMinutes"])), // Use UtcNow
                 signingCredentials: credentials
             );
 

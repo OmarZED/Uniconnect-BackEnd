@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using UniConnect.Dtos;
 using UniConnect.INterfface;
 using UniConnect.Maping;
@@ -10,12 +11,16 @@ namespace UniConnect.Repository
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<CommunityService> _logger;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-
-        public CommunityService(ApplicationDbContext context, ILogger<CommunityService> logger)
+        public CommunityService(
+            ApplicationDbContext context,
+            ILogger<CommunityService> logger,
+            IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _logger = logger;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         // Community CRUD
@@ -28,6 +33,7 @@ namespace UniConnect.Repository
                     .Include(c => c.Course)
                     .Include(c => c.StudentGroup)
                     .Include(c => c.Members)
+                    .Include(c => c.Posts) // ADDED THIS - CRITICAL
                     .Where(c => c.IsActive)
                     .OrderBy(c => c.Type)
                     .ThenBy(c => c.Name)
@@ -51,11 +57,15 @@ namespace UniConnect.Repository
                     .Include(c => c.Course)
                     .Include(c => c.StudentGroup)
                     .Include(c => c.Members)
+                    .Include(c => c.Posts) // ADDED THIS - CRITICAL
                     .FirstOrDefaultAsync(c => c.Id == id && c.IsActive);
 
                 if (community == null) return null;
 
-                return MapToCommunityDto(community);
+                // Get current user ID for member status
+                var currentUserId = await GetCurrentUserIdAsync();
+
+                return MapToCommunityDto(community, currentUserId);
             }
             catch (Exception ex)
             {
@@ -68,17 +78,26 @@ namespace UniConnect.Repository
         {
             try
             {
-                // For now, we'll use "system" as creator until we implement proper auth context
-                var creatorId = "system"; // This should be the actual user ID from auth context
+                _logger.LogInformation("🎯 Creating department community: {Name}", createDepartmentDto.Name);
 
+                // Get current user
+                var currentUser = await GetCurrentUserAsync();
+                if (currentUser == null)
+                {
+                    throw new UnauthorizedAccessException("User must be authenticated to create a community.");
+                }
+
+                _logger.LogInformation("👤 Creating community with user: {UserId} - {Email}", currentUser.Id, currentUser.Email);
+
+                // Create community
                 var community = new Community
                 {
                     Name = createDepartmentDto.Name,
                     Description = createDepartmentDto.Description,
                     Type = CommunityType.Department,
-                    FacultyId = null, // Explicitly set to null
-                    CourseId = null,   // Explicitly set to null
-                    StudentGroupId = null, // Explicitly set to null
+                    FacultyId = null,
+                    CourseId = null,
+                    StudentGroupId = null,
                     AllowPosts = createDepartmentDto.AllowPosts,
                     AutoJoin = createDepartmentDto.AutoJoin,
                     CreatedAt = DateTime.UtcNow,
@@ -88,12 +107,14 @@ namespace UniConnect.Repository
                 _context.Communities.Add(community);
                 await _context.SaveChangesAsync();
 
+                _logger.LogInformation("✅ Community created with ID: {CommunityId}", community.Id);
+
                 // Add creator as admin
                 var creatorMember = new CommunityMember
                 {
                     CommunityId = community.Id,
-                    UserId = creatorId,
-                    Role = CommunityRole.Admin, // Creator becomes admin
+                    UserId = currentUser.Id,
+                    Role = CommunityRole.Admin,
                     JoinedAt = DateTime.UtcNow,
                     IsActive = true
                 };
@@ -101,11 +122,13 @@ namespace UniConnect.Repository
                 _context.CommunityMembers.Add(creatorMember);
                 await _context.SaveChangesAsync();
 
-                return MapToCommunityDto(community);
+                _logger.LogInformation("✅ Community member (admin) added for user: {UserId}", currentUser.Id);
+
+                return MapToCommunityDto(community, currentUser.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error creating department community: {CommunityName}", createDepartmentDto.Name);
+                _logger.LogError(ex, "❌ Error creating department community: {CommunityName}", createDepartmentDto.Name);
                 throw;
             }
         }
@@ -118,6 +141,7 @@ namespace UniConnect.Repository
                     .Include(c => c.Faculty)
                     .Include(c => c.Course)
                     .Include(c => c.StudentGroup)
+                    .Include(c => c.Posts) // ADDED THIS
                     .FirstOrDefaultAsync(c => c.Id == id && c.IsActive);
 
                 if (community == null)
@@ -150,7 +174,10 @@ namespace UniConnect.Repository
 
                 await _context.SaveChangesAsync();
 
-                return MapToCommunityDto(community);
+                // Get current user ID for member status
+                var currentUserId = await GetCurrentUserIdAsync();
+
+                return MapToCommunityDto(community, currentUserId);
             }
             catch (Exception ex)
             {
@@ -215,6 +242,13 @@ namespace UniConnect.Repository
                     throw new KeyNotFoundException($"Community with ID '{communityId}' not found.");
                 }
 
+                // Check if user exists
+                var userExists = await _context.Users.AnyAsync(u => u.Id == userId);
+                if (!userExists)
+                {
+                    throw new InvalidOperationException($"User with ID '{userId}' not found.");
+                }
+
                 // Check if user is already a member
                 var existingMember = await _context.CommunityMembers
                     .FirstOrDefaultAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
@@ -268,6 +302,20 @@ namespace UniConnect.Repository
                 if (member == null)
                 {
                     throw new InvalidOperationException("User is not a member of this community.");
+                }
+
+                // Check if user is the last admin
+                if (member.Role == CommunityRole.Admin)
+                {
+                    var adminCount = await _context.CommunityMembers
+                        .CountAsync(cm => cm.CommunityId == communityId &&
+                                         cm.Role == CommunityRole.Admin &&
+                                         cm.IsActive);
+
+                    if (adminCount <= 1)
+                    {
+                        throw new InvalidOperationException("Cannot leave community as the last admin. Assign another admin first.");
+                    }
                 }
 
                 // For academic communities with auto-join, we just deactivate instead of remove
@@ -327,7 +375,7 @@ namespace UniConnect.Repository
             }
         }
 
-        // Automatic community creation for academic structures - FIXED VERSIONS
+        // Automatic community creation for academic structures
         public async Task<CommunityDto> GetOrCreateFacultyCommunityAsync(string facultyId)
         {
             try
@@ -342,12 +390,17 @@ namespace UniConnect.Repository
 
                 // Check if community already exists
                 var existingCommunity = await _context.Communities
+                    .Include(c => c.Posts) // ADDED THIS
                     .FirstOrDefaultAsync(c => c.FacultyId == facultyId && c.Type == CommunityType.Faculty && c.IsActive);
 
                 if (existingCommunity != null)
                 {
                     return MapToCommunityDto(existingCommunity);
                 }
+
+                // Get current user for admin
+                var currentUser = await GetCurrentUserAsync();
+                var adminUserId = currentUser?.Id ?? "system";
 
                 // Create new faculty community
                 var community = new Community
@@ -363,13 +416,13 @@ namespace UniConnect.Repository
                 };
 
                 _context.Communities.Add(community);
-                await _context.SaveChangesAsync(); // ✅ Save community first to get ID
+                await _context.SaveChangesAsync();
 
-                // Add system as admin - NOW community.Id has the actual value
+                // Add admin
                 var creatorMember = new CommunityMember
                 {
-                    CommunityId = community.Id, // ✅ Now this is the actual ID
-                    UserId = "system",
+                    CommunityId = community.Id,
+                    UserId = adminUserId,
                     Role = CommunityRole.Admin,
                     JoinedAt = DateTime.UtcNow,
                     IsActive = true
@@ -402,12 +455,17 @@ namespace UniConnect.Repository
 
                 // Check if community already exists
                 var existingCommunity = await _context.Communities
+                    .Include(c => c.Posts) // ADDED THIS
                     .FirstOrDefaultAsync(c => c.CourseId == courseId && c.Type == CommunityType.Course && c.IsActive);
 
                 if (existingCommunity != null)
                 {
                     return MapToCommunityDto(existingCommunity);
                 }
+
+                // Get current user for admin
+                var currentUser = await GetCurrentUserAsync();
+                var adminUserId = currentUser?.Id ?? "system";
 
                 // Create new course community
                 var community = new Community
@@ -424,13 +482,13 @@ namespace UniConnect.Repository
                 };
 
                 _context.Communities.Add(community);
-                await _context.SaveChangesAsync(); // ✅ Save community first to get ID
+                await _context.SaveChangesAsync();
 
-                // Add system as admin - NOW community.Id has the actual value
+                // Add admin
                 var creatorMember = new CommunityMember
                 {
-                    CommunityId = community.Id, // ✅ Now this is the actual ID
-                    UserId = "system",
+                    CommunityId = community.Id,
+                    UserId = adminUserId,
                     Role = CommunityRole.Admin,
                     JoinedAt = DateTime.UtcNow,
                     IsActive = true
@@ -464,12 +522,17 @@ namespace UniConnect.Repository
 
                 // Check if community already exists
                 var existingCommunity = await _context.Communities
+                    .Include(c => c.Posts) // ADDED THIS
                     .FirstOrDefaultAsync(c => c.StudentGroupId == groupId && c.Type == CommunityType.Group && c.IsActive);
 
                 if (existingCommunity != null)
                 {
                     return MapToCommunityDto(existingCommunity);
                 }
+
+                // Get current user for admin
+                var currentUser = await GetCurrentUserAsync();
+                var adminUserId = currentUser?.Id ?? "system";
 
                 // Create new group community
                 var community = new Community
@@ -487,13 +550,13 @@ namespace UniConnect.Repository
                 };
 
                 _context.Communities.Add(community);
-                await _context.SaveChangesAsync(); // ✅ Save community first to get ID
+                await _context.SaveChangesAsync();
 
-                // Add system as admin - NOW community.Id has the actual value
+                // Add admin
                 var creatorMember = new CommunityMember
                 {
-                    CommunityId = community.Id, // ✅ Now this is the actual ID
-                    UserId = "system",
+                    CommunityId = community.Id,
+                    UserId = adminUserId,
                     Role = CommunityRole.Admin,
                     JoinedAt = DateTime.UtcNow,
                     IsActive = true
@@ -516,22 +579,19 @@ namespace UniConnect.Repository
         {
             try
             {
-                _logger.LogInformation("🔍 === GETTING USER COMMUNITIES ===");
-                _logger.LogInformation("🔍 User Email: {UserEmail}", userEmail);
+                _logger.LogInformation("🔍 Getting communities for user: {UserEmail}", userEmail);
 
-                // First, find the user by email
+                // Find user by email
                 var user = await _context.Users
                     .FirstOrDefaultAsync(u => u.Email == userEmail);
 
                 if (user == null)
                 {
-                    _logger.LogWarning("❌ User not found with email: {UserEmail}", userEmail);
+                    _logger.LogWarning("User not found with email: {UserEmail}", userEmail);
                     return new List<CommunityDto>();
                 }
 
-                _logger.LogInformation("🔍 Found user: {UserId} - {UserEmail}", user.Id, user.Email);
-
-                // Now get user memberships using the User ID
+                // Get user memberships
                 var userMemberships = await _context.CommunityMembers
                     .Include(cm => cm.Community)
                         .ThenInclude(c => c.Faculty)
@@ -542,20 +602,13 @@ namespace UniConnect.Repository
                     .Include(cm => cm.Community)
                         .ThenInclude(c => c.Members)
                     .Include(cm => cm.Community)
-                        .ThenInclude(c => c.Posts)
+                        .ThenInclude(c => c.Posts) // ADDED THIS
                     .Where(cm => cm.UserId == user.Id && cm.IsActive && cm.Community.IsActive)
                     .OrderBy(cm => cm.Community.Type)
                     .ThenBy(cm => cm.Community.Name)
                     .ToListAsync();
 
-                _logger.LogInformation("🔍 Found {Count} active memberships for user {UserEmail}", userMemberships.Count, userEmail);
-
-                // Log each community found
-                foreach (var membership in userMemberships)
-                {
-                    _logger.LogInformation("🔍 User {UserEmail} is member of: {CommunityName} (ID: {CommunityId})",
-                        userEmail, membership.Community.Name, membership.Community.Id);
-                }
+                _logger.LogInformation("Found {Count} active memberships for user {UserEmail}", userMemberships.Count, userEmail);
 
                 var communities = userMemberships.Select(m =>
                 {
@@ -578,26 +631,25 @@ namespace UniConnect.Repository
                         AutoJoin = community.AutoJoin,
                         CreatedAt = community.CreatedAt,
                         UpdatedAt = community.UpdatedAt,
-                        IsActive = community.IsActive
+                        IsActive = community.IsActive,
+                        CurrentUserRole = m.Role,
+                        IsCurrentUserMember = true
                     };
                 }).ToList();
-
-                _logger.LogInformation("🔍 Returning {Count} communities for user {UserEmail}", communities.Count, userEmail);
-                _logger.LogInformation("🔍 === COMPLETED GETTING USER COMMUNITIES ===");
 
                 return communities;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ Error getting user communities for user: {UserEmail}", userEmail);
+                _logger.LogError(ex, "Error getting user communities for user: {UserEmail}", userEmail);
                 throw;
             }
         }
 
         // Helper methods
-        private CommunityDto MapToCommunityDto(Community community)
+        private CommunityDto MapToCommunityDto(Community community, string? currentUserId = null)
         {
-            return new CommunityDto
+            var dto = new CommunityDto
             {
                 Id = community.Id,
                 Name = community.Name,
@@ -609,18 +661,73 @@ namespace UniConnect.Repository
                 CourseName = community.Course?.Name,
                 StudentGroupId = community.StudentGroupId,
                 StudentGroupName = community.StudentGroup?.Name,
-                MemberCount = community.Members.Count(m => m.IsActive),
-                PostCount = community.Posts.Count(p => p.IsActive),
+                MemberCount = community.Members?.Count(m => m.IsActive) ?? 0,
+                PostCount = community.Posts?.Count(p => p.IsActive) ?? 0,
                 AllowPosts = community.AllowPosts,
                 AutoJoin = community.AutoJoin,
                 CreatedAt = community.CreatedAt,
                 UpdatedAt = community.UpdatedAt,
                 IsActive = community.IsActive
             };
+
+            // Set current user's role if userId is provided and community has members
+            if (!string.IsNullOrEmpty(currentUserId) && community.Members != null)
+            {
+                var userMembership = community.Members
+                    .FirstOrDefault(m => m.UserId == currentUserId && m.IsActive);
+
+                if (userMembership != null)
+                {
+                    dto.CurrentUserRole = userMembership.Role;
+                    dto.IsCurrentUserMember = true;
+                }
+                else
+                {
+                    dto.CurrentUserRole = null;
+                    dto.IsCurrentUserMember = false;
+                }
+            }
+
+            return dto;
         }
 
-      
+        // Helper to get current user
+        private async Task<ApplicationUser?> GetCurrentUserAsync()
+        {
+            var httpContext = _httpContextAccessor.HttpContext;
+            if (httpContext?.User?.Identity?.IsAuthenticated != true)
+            {
+                return null;
+            }
+
+            // Try to get user by email
+            var userEmail = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
+
+            if (string.IsNullOrEmpty(userEmail))
+            {
+                // Try NameIdentifier (might be email)
+                userEmail = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            }
+
+            if (string.IsNullOrEmpty(userEmail))
+            {
+                // Try custom claim
+                userEmail = httpContext.User.FindFirst("email")?.Value;
+            }
+
+            if (!string.IsNullOrEmpty(userEmail))
+            {
+                return await _context.Users.FirstOrDefaultAsync(u => u.Email == userEmail);
+            }
+
+            return null;
+        }
+
+        // Helper to get current user ID
+        private async Task<string?> GetCurrentUserIdAsync()
+        {
+            var user = await GetCurrentUserAsync();
+            return user?.Id;
+        }
     }
 }
-
-
