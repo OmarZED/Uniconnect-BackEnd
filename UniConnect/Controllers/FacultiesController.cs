@@ -13,11 +13,13 @@ namespace UniConnect.Controllers
     public class FacultiesController : ControllerBase
     {
         private readonly IAcademicService _academicService;
+        private readonly IAuthService _authService;
         private readonly ILogger<FacultiesController> _logger;
 
-        public FacultiesController(IAcademicService academicService, ILogger<FacultiesController> logger)
+        public FacultiesController(IAcademicService academicService, IAuthService authService, ILogger<FacultiesController> logger)
         {
             _academicService = academicService;
+            _authService = authService;
             _logger = logger;
         }
 
@@ -41,6 +43,46 @@ namespace UniConnect.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all faculties");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while retrieving faculties",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get faculties owned by the current dean
+        /// </summary>
+        [Authorize(Roles = "Dean")]
+        [HttpGet("mine")]
+        [ProducesResponseType(typeof(ApiResponse<List<FacultyDto>>), 200)]
+        public async Task<IActionResult> GetMyFaculties()
+        {
+            try
+            {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var faculties = await _academicService.GetFacultiesByDeanAsync(userId);
+                return Ok(new ApiResponse<List<FacultyDto>>
+                {
+                    Success = true,
+                    Message = "Faculties retrieved successfully",
+                    Data = faculties
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting faculties for current dean");
                 return StatusCode(500, new ApiResponse<object>
                 {
                     Success = false,
@@ -92,7 +134,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Create a new faculty
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<FacultyDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -110,14 +152,17 @@ namespace UniConnect.Controllers
                     });
                 }
 
-                // Automatically set the deanId from the logged-in user if they are a Dean
-                var userRole = User.FindFirst("Role")?.Value;
+                // Force DeanId to the logged-in dean
                 var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-                if (userRole == "Dean" && string.IsNullOrEmpty(createFacultyDto.DeanId))
+                if (string.IsNullOrWhiteSpace(userId))
                 {
-                    createFacultyDto.DeanId = userId;
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
                 }
+                createFacultyDto.DeanId = userId;
 
                 var faculty = await _academicService.CreateFacultyAsync(createFacultyDto);
                 return Ok(new ApiResponse<FacultyDto>
@@ -150,7 +195,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Update an existing faculty
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(ApiResponse<FacultyDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -168,6 +213,25 @@ namespace UniConnect.Controllers
                         Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
                     });
                 }
+
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var canManage = await _authService.IsUserDeanOfFacultyAsync(userId, id);
+                if (!canManage)
+                {
+                    return Forbid();
+                }
+
+                // Keep dean as current dean (no reassignment via this endpoint)
+                updateFacultyDto.DeanId = userId;
 
                 var faculty = await _academicService.UpdateFacultyAsync(id, updateFacultyDto);
                 return Ok(new ApiResponse<FacultyDto>
@@ -208,7 +272,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Delete a faculty (soft delete)
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpDelete("{id}")]
         [ProducesResponseType(typeof(ApiResponse<object>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -217,6 +281,22 @@ namespace UniConnect.Controllers
         {
             try
             {
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var canManage = await _authService.IsUserDeanOfFacultyAsync(userId, id);
+                if (!canManage)
+                {
+                    return Forbid();
+                }
+
                 var result = await _academicService.DeleteFacultyAsync(id);
                 return Ok(new ApiResponse<object>
                 {

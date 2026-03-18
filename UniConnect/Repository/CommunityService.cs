@@ -87,6 +87,11 @@ namespace UniConnect.Repository
                     throw new UnauthorizedAccessException("User must be authenticated to create a community.");
                 }
 
+                if (currentUser.Role != UserRole.DepartmentManager)
+                {
+                    throw new UnauthorizedAccessException("Only Department Managers can create department communities.");
+                }
+
                 _logger.LogInformation("👤 Creating community with user: {UserId} - {Email}", currentUser.Id, currentUser.Email);
 
                 // Create community
@@ -190,6 +195,17 @@ namespace UniConnect.Repository
         {
             try
             {
+                var currentUser = await GetCurrentUserAsync();
+                if (currentUser == null)
+                {
+                    throw new UnauthorizedAccessException("User must be authenticated to delete a community.");
+                }
+
+                if (currentUser.Role != UserRole.DepartmentManager)
+                {
+                    throw new UnauthorizedAccessException("Only Department Managers can delete department communities.");
+                }
+
                 var community = await _context.Communities
                     .Include(c => c.Posts)
                     .Include(c => c.Members)
@@ -395,7 +411,13 @@ namespace UniConnect.Repository
 
                 if (existingCommunity != null)
                 {
-                    return MapToCommunityDto(existingCommunity);
+                    var existingUser = await GetCurrentUserAsync();
+                    if (existingUser != null)
+                    {
+                        await EnsureUserMembershipAsync(existingCommunity.Id, existingUser.Id, CommunityRole.Admin);
+                    }
+
+                    return MapToCommunityDto(existingCommunity, existingUser?.Id);
                 }
 
                 // Get current user for admin
@@ -431,7 +453,7 @@ namespace UniConnect.Repository
                 _context.CommunityMembers.Add(creatorMember);
                 await _context.SaveChangesAsync();
 
-                return MapToCommunityDto(community);
+                return MapToCommunityDto(community, adminUserId == "system" ? null : adminUserId);
             }
             catch (Exception ex)
             {
@@ -460,7 +482,13 @@ namespace UniConnect.Repository
 
                 if (existingCommunity != null)
                 {
-                    return MapToCommunityDto(existingCommunity);
+                    var existingUser = await GetCurrentUserAsync();
+                    if (existingUser != null)
+                    {
+                        await EnsureUserMembershipAsync(existingCommunity.Id, existingUser.Id, CommunityRole.Admin);
+                    }
+
+                    return MapToCommunityDto(existingCommunity, existingUser?.Id);
                 }
 
                 // Get current user for admin
@@ -497,7 +525,7 @@ namespace UniConnect.Repository
                 _context.CommunityMembers.Add(creatorMember);
                 await _context.SaveChangesAsync();
 
-                return MapToCommunityDto(community);
+                return MapToCommunityDto(community, adminUserId == "system" ? null : adminUserId);
             }
             catch (Exception ex)
             {
@@ -527,7 +555,13 @@ namespace UniConnect.Repository
 
                 if (existingCommunity != null)
                 {
-                    return MapToCommunityDto(existingCommunity);
+                    var existingUser = await GetCurrentUserAsync();
+                    if (existingUser != null)
+                    {
+                        await EnsureUserMembershipAsync(existingCommunity.Id, existingUser.Id, CommunityRole.Admin);
+                    }
+
+                    return MapToCommunityDto(existingCommunity, existingUser?.Id);
                 }
 
                 // Get current user for admin
@@ -565,7 +599,7 @@ namespace UniConnect.Repository
                 _context.CommunityMembers.Add(creatorMember);
                 await _context.SaveChangesAsync();
 
-                return MapToCommunityDto(community);
+                return MapToCommunityDto(community, adminUserId == "system" ? null : adminUserId);
             }
             catch (Exception ex)
             {
@@ -575,19 +609,19 @@ namespace UniConnect.Repository
         }
 
         // User-specific methods
-        public async Task<List<CommunityDto>> GetUserCommunitiesAsync(string userEmail)
+        public async Task<List<CommunityDto>> GetUserCommunitiesAsync(string userId)
         {
             try
             {
-                _logger.LogInformation("🔍 Getting communities for user: {UserEmail}", userEmail);
+                _logger.LogInformation("🔍 Getting communities for user: {UserId}", userId);
 
-                // Find user by email
+                // Find user by id
                 var user = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == userEmail);
+                    .FirstOrDefaultAsync(u => u.Id == userId);
 
                 if (user == null)
                 {
-                    _logger.LogWarning("User not found with email: {UserEmail}", userEmail);
+                    _logger.LogWarning("User not found with id: {UserId}", userId);
                     return new List<CommunityDto>();
                 }
 
@@ -608,7 +642,7 @@ namespace UniConnect.Repository
                     .ThenBy(cm => cm.Community.Name)
                     .ToListAsync();
 
-                _logger.LogInformation("Found {Count} active memberships for user {UserEmail}", userMemberships.Count, userEmail);
+                _logger.LogInformation("Found {Count} active memberships for user {UserId}", userMemberships.Count, userId);
 
                 var communities = userMemberships.Select(m =>
                 {
@@ -641,7 +675,186 @@ namespace UniConnect.Repository
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error getting user communities for user: {UserEmail}", userEmail);
+                _logger.LogError(ex, "Error getting user communities for user: {UserId}", userId);
+                throw;
+            }
+        }
+
+        // Invitations
+        public async Task<CommunityInvitationDto> CreateInvitationAsync(string communityId, string inviterId, string inviteeEmail)
+        {
+            try
+            {
+                var community = await _context.Communities
+                    .FirstOrDefaultAsync(c => c.Id == communityId && c.IsActive);
+
+                if (community == null)
+                {
+                    throw new KeyNotFoundException($"Community with ID '{communityId}' not found.");
+                }
+
+                var inviter = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == inviterId && u.IsActive);
+
+                if (inviter == null)
+                {
+                    throw new InvalidOperationException("Inviter not found.");
+                }
+
+                var inviterMember = await _context.CommunityMembers
+                    .FirstOrDefaultAsync(cm => cm.CommunityId == communityId &&
+                                               cm.UserId == inviterId &&
+                                               cm.IsActive);
+
+                if (inviterMember == null || inviterMember.Role != CommunityRole.Admin)
+                {
+                    throw new UnauthorizedAccessException("Only community admins can invite members.");
+                }
+
+                var normalizedEmail = inviteeEmail.Trim().ToLowerInvariant();
+
+                var existingPending = await _context.CommunityInvitations
+                    .FirstOrDefaultAsync(ci =>
+                        ci.CommunityId == communityId &&
+                        ci.InviteeEmail == normalizedEmail &&
+                        ci.Status == InvitationStatus.Pending &&
+                        ci.IsActive);
+
+                if (existingPending != null)
+                {
+                    throw new InvalidOperationException("An active invitation already exists for this email.");
+                }
+
+                var invitee = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.IsActive);
+
+                var invitation = new CommunityInvitation
+                {
+                    CommunityId = communityId,
+                    InviterId = inviterId,
+                    InviteeId = invitee?.Id,
+                    InviteeEmail = normalizedEmail,
+                    Status = InvitationStatus.Pending,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                _context.CommunityInvitations.Add(invitation);
+                await _context.SaveChangesAsync();
+
+                return new CommunityInvitationDto
+                {
+                    Id = invitation.Id,
+                    CommunityId = community.Id,
+                    CommunityName = community.Name,
+                    InviterId = inviter.Id,
+                    InviterName = $"{inviter.FirstName} {inviter.LastName}",
+                    InviteeEmail = invitation.InviteeEmail,
+                    Status = invitation.Status,
+                    CreatedAt = invitation.CreatedAt,
+                    RespondedAt = invitation.RespondedAt
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating invitation for community: {CommunityId}", communityId);
+                throw;
+            }
+        }
+
+        public async Task<List<CommunityInvitationDto>> GetInvitationsForEmailAsync(string inviteeEmail)
+        {
+            try
+            {
+                var normalizedEmail = inviteeEmail.Trim().ToLowerInvariant();
+
+                var invitations = await _context.CommunityInvitations
+                    .Include(ci => ci.Community)
+                    .Include(ci => ci.Inviter)
+                    .Where(ci => ci.InviteeEmail == normalizedEmail && ci.IsActive)
+                    .OrderByDescending(ci => ci.CreatedAt)
+                    .ToListAsync();
+
+                return invitations.Select(ci => new CommunityInvitationDto
+                {
+                    Id = ci.Id,
+                    CommunityId = ci.CommunityId,
+                    CommunityName = ci.Community.Name,
+                    InviterId = ci.InviterId,
+                    InviterName = $"{ci.Inviter.FirstName} {ci.Inviter.LastName}",
+                    InviteeEmail = ci.InviteeEmail,
+                    Status = ci.Status,
+                    CreatedAt = ci.CreatedAt,
+                    RespondedAt = ci.RespondedAt
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting invitations for email: {InviteeEmail}", inviteeEmail);
+                throw;
+            }
+        }
+
+        public async Task<CommunityInvitationDto> RespondToInvitationAsync(string invitationId, string inviteeEmail, bool accept)
+        {
+            try
+            {
+                var normalizedEmail = inviteeEmail.Trim().ToLowerInvariant();
+
+                var invitation = await _context.CommunityInvitations
+                    .Include(ci => ci.Community)
+                    .Include(ci => ci.Inviter)
+                    .FirstOrDefaultAsync(ci => ci.Id == invitationId && ci.IsActive);
+
+                if (invitation == null)
+                {
+                    throw new KeyNotFoundException("Invitation not found.");
+                }
+
+                if (invitation.Status != InvitationStatus.Pending)
+                {
+                    throw new InvalidOperationException("Invitation is not pending.");
+                }
+
+                if (!string.Equals(invitation.InviteeEmail, normalizedEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new UnauthorizedAccessException("Invitation does not belong to this user.");
+                }
+
+                // Ensure invitee exists
+                var invitee = await _context.Users.FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.IsActive);
+                if (invitee == null)
+                {
+                    throw new InvalidOperationException("Invitee user not found.");
+                }
+
+                invitation.InviteeId = invitee.Id;
+                invitation.Status = accept ? InvitationStatus.Accepted : InvitationStatus.Declined;
+                invitation.RespondedAt = DateTime.UtcNow;
+
+                if (accept)
+                {
+                    await JoinCommunityAsync(invitation.CommunityId, invitee.Id);
+                }
+
+                await _context.SaveChangesAsync();
+
+                return new CommunityInvitationDto
+                {
+                    Id = invitation.Id,
+                    CommunityId = invitation.CommunityId,
+                    CommunityName = invitation.Community.Name,
+                    InviterId = invitation.InviterId,
+                    InviterName = $"{invitation.Inviter.FirstName} {invitation.Inviter.LastName}",
+                    InviteeEmail = invitation.InviteeEmail,
+                    Status = invitation.Status,
+                    CreatedAt = invitation.CreatedAt,
+                    RespondedAt = invitation.RespondedAt
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error responding to invitation: {InvitationId}", invitationId);
                 throw;
             }
         }
@@ -728,6 +941,38 @@ namespace UniConnect.Repository
         {
             var user = await GetCurrentUserAsync();
             return user?.Id;
+        }
+
+        private async Task EnsureUserMembershipAsync(string communityId, string userId, CommunityRole role)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return;
+            }
+
+            var existing = await _context.CommunityMembers
+                .FirstOrDefaultAsync(cm => cm.CommunityId == communityId && cm.UserId == userId);
+
+            if (existing != null)
+            {
+                existing.IsActive = true;
+                existing.LeftAt = null;
+                existing.JoinedAt = existing.JoinedAt == default ? DateTime.UtcNow : existing.JoinedAt;
+                existing.Role = role;
+            }
+            else
+            {
+                _context.CommunityMembers.Add(new CommunityMember
+                {
+                    CommunityId = communityId,
+                    UserId = userId,
+                    Role = role,
+                    JoinedAt = DateTime.UtcNow,
+                    IsActive = true
+                });
+            }
+
+            await _context.SaveChangesAsync();
         }
     }
 }

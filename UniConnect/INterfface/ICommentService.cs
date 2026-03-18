@@ -7,8 +7,9 @@ namespace UniConnect.INterfface
     {
         // Comment CRUD
         Task<CommentDto> CreateCommentAsync(CreateCommentDto createCommentDto, string authorId);
-        Task<List<CommentDto>> GetPostCommentsAsync(string postId);
-        Task<CommentDto> GetCommentByIdAsync(string id);
+        Task<List<CommentDto>> GetPostCommentsAsync(string postId, string? userId = null);
+        Task<CommentDto> GetCommentByIdAsync(string id, string? userId = null);
+        Task<CommentDto> UpdateCommentAsync(string id, UpdateCommentDto updateCommentDto, string userId);
         Task<bool> DeleteCommentAsync(string id, string userId);
 
         // Comment voting
@@ -17,6 +18,6 @@ namespace UniConnect.INterfface
         Task<CommentVoteDto> GetUserVoteOnCommentAsync(string commentId, string userId);
 
         // Nested comments
-        Task<List<CommentDto>> GetCommentRepliesAsync(string commentId);
+        Task<List<CommentDto>> GetCommentRepliesAsync(string commentId, string? userId = null);
     }
 }

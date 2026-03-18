@@ -6,6 +6,7 @@ namespace UniConnect.INterfface
     {
         // Faculty methods
         Task<List<FacultyDto>> GetAllFacultiesAsync();
+        Task<List<FacultyDto>> GetFacultiesByDeanAsync(string deanId);
         Task<FacultyDto> GetFacultyByIdAsync(string id);
         Task<FacultyDto> CreateFacultyAsync(CreateFacultyDto createFacultyDto);
         Task<FacultyDto> UpdateFacultyAsync(string id, CreateFacultyDto updateFacultyDto);
@@ -13,6 +14,7 @@ namespace UniConnect.INterfface
 
         // Course methods
         Task<List<CourseDto>> GetAllCoursesAsync();
+        Task<List<CourseDto>> GetCoursesByDeanAsync(string deanId);
         Task<List<CourseDto>> GetCoursesByFacultyAsync(string facultyId);
         Task<CourseDto> GetCourseByIdAsync(string id);
         Task<CourseDto> CreateCourseAsync(CreateCourseDto createCourseDto);
@@ -21,11 +23,17 @@ namespace UniConnect.INterfface
 
         // StudentGroup methods
         Task<List<StudentGroupDto>> GetAllGroupsAsync();
+        Task<List<StudentGroupDto>> GetGroupsByDeanAsync(string deanId);
         Task<List<StudentGroupDto>> GetGroupsByCourseAsync(string courseId);
         Task<StudentGroupDto> GetGroupByIdAsync(string id);
         Task<StudentGroupDto> CreateGroupAsync(CreateStudentGroupDto createGroupDto);
         Task<StudentGroupDto> UpdateGroupAsync(string id, CreateStudentGroupDto updateGroupDto);
         Task<bool> DeleteGroupAsync(string id);
+
+        // Subject methods
+        Task<SubjectDto> CreateSubjectAsync(CreateSubjectDto createSubjectDto);
+        Task<SubjectDto> GetSubjectByIdAsync(string id);
+        Task<List<SubjectDto>> GetSubjectsByGroupAsync(string studentGroupId);
 
         // Helper methods for dropdowns
         Task<List<FacultyDto>> GetActiveFacultiesAsync();

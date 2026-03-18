@@ -12,11 +12,13 @@ namespace UniConnect.Controllers
     public class StudentGroupsController : ControllerBase
     {
         private readonly IAcademicService _academicService;
+        private readonly IAuthService _authService;
         private readonly ILogger<StudentGroupsController> _logger;
 
-        public StudentGroupsController(IAcademicService academicService, ILogger<StudentGroupsController> logger)
+        public StudentGroupsController(IAcademicService academicService, IAuthService authService, ILogger<StudentGroupsController> logger)
         {
             _academicService = academicService;
+            _authService = authService;
             _logger = logger;
         }
 
@@ -40,6 +42,46 @@ namespace UniConnect.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all student groups");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while retrieving student groups",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get student groups owned by the current dean
+        /// </summary>
+        [Authorize(Roles = "Dean")]
+        [HttpGet("mine")]
+        [ProducesResponseType(typeof(ApiResponse<List<StudentGroupDto>>), 200)]
+        public async Task<IActionResult> GetMyGroups()
+        {
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var groups = await _academicService.GetGroupsByDeanAsync(userId);
+                return Ok(new ApiResponse<List<StudentGroupDto>>
+                {
+                    Success = true,
+                    Message = "Student groups retrieved successfully",
+                    Data = groups
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting groups for current dean");
                 return StatusCode(500, new ApiResponse<object>
                 {
                     Success = false,
@@ -120,7 +162,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Create a new student group
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<StudentGroupDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -136,6 +178,32 @@ namespace UniConnect.Controllers
                         Message = "Invalid group data",
                         Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
                     });
+                }
+
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var course = await _academicService.GetCourseByIdAsync(createGroupDto.CourseId);
+                if (course == null)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Course not found"
+                    });
+                }
+
+                var canManageFaculty = await _authService.IsUserDeanOfFacultyAsync(userId, course.FacultyId);
+                if (!canManageFaculty)
+                {
+                    return Forbid();
                 }
 
                 var group = await _academicService.CreateGroupAsync(createGroupDto);
@@ -169,7 +237,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Update an existing student group
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(ApiResponse<StudentGroupDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -186,6 +254,32 @@ namespace UniConnect.Controllers
                         Message = "Invalid group data",
                         Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
                     });
+                }
+
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var course = await _academicService.GetCourseByIdAsync(updateGroupDto.CourseId);
+                if (course == null)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Course not found"
+                    });
+                }
+
+                var canManageFaculty = await _authService.IsUserDeanOfFacultyAsync(userId, course.FacultyId);
+                if (!canManageFaculty)
+                {
+                    return Forbid();
                 }
 
                 var group = await _academicService.UpdateGroupAsync(id, updateGroupDto);
@@ -227,7 +321,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Delete a student group (soft delete)
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpDelete("{id}")]
         [ProducesResponseType(typeof(ApiResponse<object>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -236,6 +330,32 @@ namespace UniConnect.Controllers
         {
             try
             {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var group = await _academicService.GetGroupByIdAsync(id);
+                if (group == null)
+                {
+                    return NotFound(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Student group not found"
+                    });
+                }
+
+                var canManageFaculty = await _authService.IsUserDeanOfFacultyAsync(userId, group.FacultyId);
+                if (!canManageFaculty)
+                {
+                    return Forbid();
+                }
+
                 var result = await _academicService.DeleteGroupAsync(id);
                 return Ok(new ApiResponse<object>
                 {

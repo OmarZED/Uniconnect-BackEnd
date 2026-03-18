@@ -16,10 +16,12 @@ namespace UniConnect.Maping
         public DbSet<Faculty> Faculties { get; set; }
         public DbSet<Course> Courses { get; set; }
         public DbSet<StudentGroup> StudentGroups { get; set; }
+        public DbSet<Subject> Subjects { get; set; }
 
         // === COMMUNITY DB SETS ===
         public DbSet<Community> Communities { get; set; }
         public DbSet<CommunityMember> CommunityMembers { get; set; }
+        public DbSet<CommunityInvitation> CommunityInvitations { get; set; }
         public DbSet<Post> Posts { get; set; }
         public DbSet<PostReaction> PostReactions { get; set; }
         public DbSet<Comment> Comments { get; set; }
@@ -159,6 +161,37 @@ namespace UniConnect.Maping
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
+            // Configure Subject entity
+            modelBuilder.Entity<Subject>(entity =>
+            {
+                entity.Property(s => s.Name)
+                    .IsRequired()
+                    .HasMaxLength(100);
+
+                entity.Property(s => s.Code)
+                    .IsRequired()
+                    .HasMaxLength(20);
+
+                entity.Property(s => s.Description)
+                    .IsRequired(false);
+
+                entity.Property(s => s.CreatedAt)
+                    .IsRequired();
+
+                entity.Property(s => s.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.HasOne(s => s.StudentGroup)
+                    .WithMany()
+                    .HasForeignKey(s => s.StudentGroupId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(s => s.Teacher)
+                    .WithMany()
+                    .HasForeignKey(s => s.TeacherId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
             // === COMMUNITY CONFIGURATIONS ===
 
             // Configure Community entity
@@ -234,6 +267,43 @@ namespace UniConnect.Maping
                     .WithMany()
                     .HasForeignKey(cm => cm.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Configure CommunityInvitation entity
+            modelBuilder.Entity<CommunityInvitation>(entity =>
+            {
+                entity.Property(ci => ci.InviteeEmail)
+                    .IsRequired()
+                    .HasMaxLength(256);
+
+                entity.Property(ci => ci.Status)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+
+                entity.Property(ci => ci.CreatedAt)
+                    .IsRequired();
+
+                entity.Property(ci => ci.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.HasOne(ci => ci.Community)
+                    .WithMany()
+                    .HasForeignKey(ci => ci.CommunityId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(ci => ci.Inviter)
+                    .WithMany()
+                    .HasForeignKey(ci => ci.InviterId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(ci => ci.Invitee)
+                    .WithMany()
+                    .HasForeignKey(ci => ci.InviteeId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(ci => new { ci.CommunityId, ci.InviteeEmail, ci.Status })
+                    .HasDatabaseName("IX_CommunityInvitation_UniquePending");
             });
 
             // Configure Post entity

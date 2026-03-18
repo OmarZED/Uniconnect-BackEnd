@@ -89,7 +89,7 @@ namespace UniConnect.Controllers
             }
         }
 
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "DepartmentManager")]
         [HttpPost("department")]
         [ProducesResponseType(typeof(ApiResponse<CommunityDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -187,7 +187,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Delete a community (soft delete) - Only department communities can be deleted manually
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "DepartmentManager")]
         [HttpDelete("{id}")]
         [ProducesResponseType(typeof(ApiResponse<object>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -283,6 +283,238 @@ namespace UniConnect.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while joining the community",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Invite a user to a community (admin only)
+        /// </summary>
+        [Authorize]
+        [HttpPost("{id}/invite")]
+        [ProducesResponseType(typeof(ApiResponse<CommunityInvitationDto>), 200)]
+        [ProducesResponseType(typeof(ApiResponse<object>), 400)]
+        [ProducesResponseType(typeof(ApiResponse<object>), 404)]
+        public async Task<IActionResult> InviteToCommunity(string id, CreateCommunityInvitationDto createInvitationDto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Invalid invitation data",
+                        Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
+                    });
+                }
+
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var invitation = await _communityService.CreateInvitationAsync(id, userId, createInvitationDto.InviteeEmail);
+                return Ok(new ApiResponse<CommunityInvitationDto>
+                {
+                    Success = true,
+                    Message = "Invitation created successfully",
+                    Data = invitation
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating invitation for community: {CommunityId}", id);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while creating the invitation",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get invitations for the current user
+        /// </summary>
+        [Authorize]
+        [HttpGet("invitations")]
+        [ProducesResponseType(typeof(ApiResponse<List<CommunityInvitationDto>>), 200)]
+        public async Task<IActionResult> GetMyInvitations()
+        {
+            try
+            {
+                var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                if (string.IsNullOrEmpty(userEmail))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var invitations = await _communityService.GetInvitationsForEmailAsync(userEmail);
+                return Ok(new ApiResponse<List<CommunityInvitationDto>>
+                {
+                    Success = true,
+                    Message = "Invitations retrieved successfully",
+                    Data = invitations
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting invitations");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while retrieving invitations",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Accept an invitation
+        /// </summary>
+        [Authorize]
+        [HttpPost("invitations/{invitationId}/accept")]
+        [ProducesResponseType(typeof(ApiResponse<CommunityInvitationDto>), 200)]
+        public async Task<IActionResult> AcceptInvitation(string invitationId)
+        {
+            try
+            {
+                var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                if (string.IsNullOrEmpty(userEmail))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var invitation = await _communityService.RespondToInvitationAsync(invitationId, userEmail, true);
+                return Ok(new ApiResponse<CommunityInvitationDto>
+                {
+                    Success = true,
+                    Message = "Invitation accepted",
+                    Data = invitation
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error accepting invitation: {InvitationId}", invitationId);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while accepting the invitation",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Decline an invitation
+        /// </summary>
+        [Authorize]
+        [HttpPost("invitations/{invitationId}/decline")]
+        [ProducesResponseType(typeof(ApiResponse<CommunityInvitationDto>), 200)]
+        public async Task<IActionResult> DeclineInvitation(string invitationId)
+        {
+            try
+            {
+                var userEmail = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+                if (string.IsNullOrEmpty(userEmail))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var invitation = await _communityService.RespondToInvitationAsync(invitationId, userEmail, false);
+                return Ok(new ApiResponse<CommunityInvitationDto>
+                {
+                    Success = true,
+                    Message = "Invitation declined",
+                    Data = invitation
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Forbid();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error declining invitation: {InvitationId}", invitationId);
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while declining the invitation",
                     Errors = new[] { ex.Message }
                 });
             }

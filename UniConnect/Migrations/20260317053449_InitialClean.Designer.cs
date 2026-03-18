@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using UniConnect.Maping;
 
@@ -11,9 +12,11 @@ using UniConnect.Maping;
 namespace UniConnect.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260317053449_InitialClean")]
+    partial class InitialClean
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -407,55 +410,6 @@ namespace UniConnect.Migrations
                     b.ToTable("Communities");
                 });
 
-            modelBuilder.Entity("UniConnect.Models.CommunityInvitation", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("CommunityId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("InviteeEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("InviteeId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("InviterId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<DateTime?>("RespondedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InviteeId");
-
-                    b.HasIndex("InviterId");
-
-                    b.HasIndex("CommunityId", "InviteeEmail", "Status")
-                        .HasDatabaseName("IX_CommunityInvitation_UniquePending");
-
-                    b.ToTable("CommunityInvitations");
-                });
-
             modelBuilder.Entity("UniConnect.Models.CommunityMember", b =>
                 {
                     b.Property<string>("Id")
@@ -703,48 +657,6 @@ namespace UniConnect.Migrations
                     b.ToTable("StudentGroups");
                 });
 
-            modelBuilder.Entity("UniConnect.Models.Subject", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("StudentGroupId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("TeacherId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StudentGroupId");
-
-                    b.HasIndex("TeacherId");
-
-                    b.ToTable("Subjects");
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -889,32 +801,6 @@ namespace UniConnect.Migrations
                     b.Navigation("StudentGroup");
                 });
 
-            modelBuilder.Entity("UniConnect.Models.CommunityInvitation", b =>
-                {
-                    b.HasOne("UniConnect.Models.Community", "Community")
-                        .WithMany()
-                        .HasForeignKey("CommunityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("UniConnect.Models.ApplicationUser", "Invitee")
-                        .WithMany()
-                        .HasForeignKey("InviteeId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("UniConnect.Models.ApplicationUser", "Inviter")
-                        .WithMany()
-                        .HasForeignKey("InviterId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Community");
-
-                    b.Navigation("Invitee");
-
-                    b.Navigation("Inviter");
-                });
-
             modelBuilder.Entity("UniConnect.Models.CommunityMember", b =>
                 {
                     b.HasOne("UniConnect.Models.Community", "Community")
@@ -1001,24 +887,6 @@ namespace UniConnect.Migrations
                         .IsRequired();
 
                     b.Navigation("Course");
-                });
-
-            modelBuilder.Entity("UniConnect.Models.Subject", b =>
-                {
-                    b.HasOne("UniConnect.Models.StudentGroup", "StudentGroup")
-                        .WithMany()
-                        .HasForeignKey("StudentGroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("UniConnect.Models.ApplicationUser", "Teacher")
-                        .WithMany()
-                        .HasForeignKey("TeacherId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("StudentGroup");
-
-                    b.Navigation("Teacher");
                 });
 
             modelBuilder.Entity("UniConnect.Models.ApplicationUser", b =>

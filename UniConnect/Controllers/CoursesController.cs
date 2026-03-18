@@ -12,11 +12,13 @@ namespace UniConnect.Controllers
     public class CoursesController : ControllerBase
     {
         private readonly IAcademicService _academicService;
+        private readonly IAuthService _authService;
         private readonly ILogger<CoursesController> _logger;
 
-        public CoursesController(IAcademicService academicService, ILogger<CoursesController> logger)
+        public CoursesController(IAcademicService academicService, IAuthService authService, ILogger<CoursesController> logger)
         {
             _academicService = academicService;
+            _authService = authService;
             _logger = logger;
         }
 
@@ -40,6 +42,46 @@ namespace UniConnect.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all courses");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while retrieving courses",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get courses owned by the current dean
+        /// </summary>
+        [Authorize(Roles = "Dean")]
+        [HttpGet("mine")]
+        [ProducesResponseType(typeof(ApiResponse<List<CourseDto>>), 200)]
+        public async Task<IActionResult> GetMyCourses()
+        {
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var courses = await _academicService.GetCoursesByDeanAsync(userId);
+                return Ok(new ApiResponse<List<CourseDto>>
+                {
+                    Success = true,
+                    Message = "Courses retrieved successfully",
+                    Data = courses
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting courses for current dean");
                 return StatusCode(500, new ApiResponse<object>
                 {
                     Success = false,
@@ -120,7 +162,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Create a new course
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<CourseDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -136,6 +178,22 @@ namespace UniConnect.Controllers
                         Message = "Invalid course data",
                         Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
                     });
+                }
+
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var canManageFaculty = await _authService.IsUserDeanOfFacultyAsync(userId, createCourseDto.FacultyId);
+                if (!canManageFaculty)
+                {
+                    return Forbid();
                 }
 
                 var course = await _academicService.CreateCourseAsync(createCourseDto);
@@ -169,7 +227,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Update an existing course
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(ApiResponse<CourseDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -186,6 +244,22 @@ namespace UniConnect.Controllers
                         Message = "Invalid course data",
                         Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
                     });
+                }
+
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var canManageFaculty = await _authService.IsUserDeanOfFacultyAsync(userId, updateCourseDto.FacultyId);
+                if (!canManageFaculty)
+                {
+                    return Forbid();
                 }
 
                 var course = await _academicService.UpdateCourseAsync(id, updateCourseDto);
@@ -227,7 +301,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Delete a course (soft delete)
         /// </summary>
-        [Authorize(Roles = "Dean,DepartmentManager")]
+        [Authorize(Roles = "Dean")]
         [HttpDelete("{id}")]
         [ProducesResponseType(typeof(ApiResponse<object>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -236,6 +310,32 @@ namespace UniConnect.Controllers
         {
             try
             {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var course = await _academicService.GetCourseByIdAsync(id);
+                if (course == null)
+                {
+                    return NotFound(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Course not found"
+                    });
+                }
+
+                var canManageFaculty = await _authService.IsUserDeanOfFacultyAsync(userId, course.FacultyId);
+                if (!canManageFaculty)
+                {
+                    return Forbid();
+                }
+
                 var result = await _academicService.DeleteCourseAsync(id);
                 return Ok(new ApiResponse<object>
                 {

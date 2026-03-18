@@ -49,6 +49,35 @@ namespace UniConnect.Repository
             }
         }
 
+        public async Task<List<FacultyDto>> GetFacultiesByDeanAsync(string deanId)
+        {
+            try
+            {
+                var faculties = await _context.Faculties
+                    .Include(f => f.Dean)
+                    .Where(f => f.IsActive && f.DeanId == deanId)
+                    .OrderBy(f => f.Name)
+                    .ToListAsync();
+
+                return faculties.Select(f => new FacultyDto
+                {
+                    Id = f.Id,
+                    Name = f.Name,
+                    Code = f.Code,
+                    Description = f.Description,
+                    DeanId = f.DeanId,
+                    DeanName = f.Dean != null ? $"{f.Dean.FirstName} {f.Dean.LastName}" : null,
+                    CreatedAt = f.CreatedAt,
+                    IsActive = f.IsActive
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting faculties for dean: {DeanId}", deanId);
+                throw;
+            }
+        }
+
         public async Task<FacultyDto> GetFacultyByIdAsync(string id)
         {
             try
@@ -82,6 +111,11 @@ namespace UniConnect.Repository
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(createFacultyDto.DeanId))
+                {
+                    throw new InvalidOperationException("DeanId is required to create a faculty.");
+                }
+
                 // Check if faculty code already exists
                 var existingFaculty = await _context.Faculties
                     .FirstOrDefaultAsync(f => f.Code == createFacultyDto.Code && f.IsActive);
@@ -152,6 +186,11 @@ namespace UniConnect.Repository
                 if (faculty == null)
                 {
                     throw new KeyNotFoundException($"Faculty with ID '{id}' not found.");
+                }
+
+                if (string.IsNullOrWhiteSpace(updateFacultyDto.DeanId))
+                {
+                    throw new InvalidOperationException("DeanId is required to update a faculty.");
                 }
 
                 // Check if code is being changed and if it conflicts with another faculty
@@ -278,6 +317,37 @@ namespace UniConnect.Repository
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all courses");
+                throw;
+            }
+        }
+
+        public async Task<List<CourseDto>> GetCoursesByDeanAsync(string deanId)
+        {
+            try
+            {
+                var courses = await _context.Courses
+                    .Include(c => c.Faculty)
+                    .Where(c => c.IsActive && c.Faculty.DeanId == deanId)
+                    .OrderBy(c => c.Faculty.Name)
+                    .ThenBy(c => c.Year)
+                    .ThenBy(c => c.Name)
+                    .ToListAsync();
+
+                return courses.Select(c => new CourseDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Year = c.Year,
+                    Code = c.Code,
+                    FacultyId = c.FacultyId,
+                    FacultyName = c.Faculty.Name,
+                    CreatedAt = c.CreatedAt,
+                    IsActive = c.IsActive
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting courses for dean: {DeanId}", deanId);
                 throw;
             }
         }
@@ -541,6 +611,42 @@ namespace UniConnect.Repository
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting all groups");
+                throw;
+            }
+        }
+
+        public async Task<List<StudentGroupDto>> GetGroupsByDeanAsync(string deanId)
+        {
+            try
+            {
+                var groups = await _context.StudentGroups
+                    .Include(g => g.Course)
+                    .ThenInclude(c => c.Faculty)
+                    .Where(g => g.IsActive && g.Course.Faculty.DeanId == deanId)
+                    .OrderBy(g => g.Course.Faculty.Name)
+                    .ThenBy(g => g.Course.Year)
+                    .ThenBy(g => g.Course.Name)
+                    .ThenBy(g => g.Name)
+                    .ToListAsync();
+
+                return groups.Select(g => new StudentGroupDto
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    Code = g.Code,
+                    Description = g.Description,
+                    CourseId = g.CourseId,
+                    CourseName = g.Course.Name,
+                    FacultyId = g.Course.FacultyId,
+                    FacultyName = g.Course.Faculty.Name,
+                    CreatedAt = g.CreatedAt,
+                    IsActive = g.IsActive,
+                    StudentCount = g.Students.Count(s => s.IsActive)
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting groups for dean: {DeanId}", deanId);
                 throw;
             }
         }
@@ -855,6 +961,168 @@ namespace UniConnect.Repository
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting groups for dropdown");
+                throw;
+            }
+        }
+
+        // ========== SUBJECT METHODS ==========
+        public async Task<SubjectDto> CreateSubjectAsync(CreateSubjectDto createSubjectDto)
+        {
+            try
+            {
+                // Verify student group exists
+                var group = await _context.StudentGroups
+                    .Include(g => g.Course)
+                    .ThenInclude(c => c.Faculty)
+                    .FirstOrDefaultAsync(g => g.Id == createSubjectDto.StudentGroupId && g.IsActive);
+
+                if (group == null)
+                {
+                    throw new InvalidOperationException($"Student group with ID '{createSubjectDto.StudentGroupId}' not found.");
+                }
+
+                // Check if subject code already exists in the same group
+                var existingSubject = await _context.Subjects
+                    .FirstOrDefaultAsync(s => s.Code == createSubjectDto.Code &&
+                                           s.StudentGroupId == createSubjectDto.StudentGroupId &&
+                                           s.IsActive);
+
+                if (existingSubject != null)
+                {
+                    throw new InvalidOperationException($"Subject with code '{createSubjectDto.Code}' already exists in this student group.");
+                }
+
+                var subject = new Subject
+                {
+                    Name = createSubjectDto.Name,
+                    Code = createSubjectDto.Code,
+                    Description = createSubjectDto.Description,
+                    StudentGroupId = createSubjectDto.StudentGroupId,
+                    TeacherId = createSubjectDto.TeacherId,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                _context.Subjects.Add(subject);
+                await _context.SaveChangesAsync();
+
+                // Reload with navigation
+                await _context.Entry(subject)
+                    .Reference(s => s.StudentGroup)
+                    .LoadAsync();
+
+                await _context.Entry(subject.StudentGroup)
+                    .Reference(g => g.Course)
+                    .LoadAsync();
+
+                await _context.Entry(subject.StudentGroup.Course)
+                    .Reference(c => c.Faculty)
+                    .LoadAsync();
+
+                if (!string.IsNullOrEmpty(subject.TeacherId))
+                {
+                    await _context.Entry(subject)
+                        .Reference(s => s.Teacher)
+                        .LoadAsync();
+                }
+
+                return new SubjectDto
+                {
+                    Id = subject.Id,
+                    Name = subject.Name,
+                    Code = subject.Code,
+                    Description = subject.Description,
+                    StudentGroupId = subject.StudentGroupId,
+                    StudentGroupName = subject.StudentGroup.Name,
+                    CourseId = subject.StudentGroup.CourseId,
+                    CourseName = subject.StudentGroup.Course.Name,
+                    FacultyId = subject.StudentGroup.Course.FacultyId,
+                    FacultyName = subject.StudentGroup.Course.Faculty.Name,
+                    TeacherId = subject.TeacherId,
+                    TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    CreatedAt = subject.CreatedAt,
+                    IsActive = subject.IsActive
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating subject: {SubjectName}", createSubjectDto.Name);
+                throw;
+            }
+        }
+
+        public async Task<SubjectDto> GetSubjectByIdAsync(string id)
+        {
+            try
+            {
+                var subject = await _context.Subjects
+                    .Include(s => s.Teacher)
+                    .Include(s => s.StudentGroup)
+                        .ThenInclude(g => g.Course)
+                            .ThenInclude(c => c.Faculty)
+                    .FirstOrDefaultAsync(s => s.Id == id && s.IsActive);
+
+                if (subject == null) return null;
+
+                return new SubjectDto
+                {
+                    Id = subject.Id,
+                    Name = subject.Name,
+                    Code = subject.Code,
+                    Description = subject.Description,
+                    StudentGroupId = subject.StudentGroupId,
+                    StudentGroupName = subject.StudentGroup.Name,
+                    CourseId = subject.StudentGroup.CourseId,
+                    CourseName = subject.StudentGroup.Course.Name,
+                    FacultyId = subject.StudentGroup.Course.FacultyId,
+                    FacultyName = subject.StudentGroup.Course.Faculty.Name,
+                    TeacherId = subject.TeacherId,
+                    TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    CreatedAt = subject.CreatedAt,
+                    IsActive = subject.IsActive
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting subject by ID: {SubjectId}", id);
+                throw;
+            }
+        }
+
+        public async Task<List<SubjectDto>> GetSubjectsByGroupAsync(string studentGroupId)
+        {
+            try
+            {
+                var subjects = await _context.Subjects
+                    .Include(s => s.Teacher)
+                    .Include(s => s.StudentGroup)
+                        .ThenInclude(g => g.Course)
+                            .ThenInclude(c => c.Faculty)
+                    .Where(s => s.StudentGroupId == studentGroupId && s.IsActive)
+                    .OrderBy(s => s.Name)
+                    .ToListAsync();
+
+                return subjects.Select(subject => new SubjectDto
+                {
+                    Id = subject.Id,
+                    Name = subject.Name,
+                    Code = subject.Code,
+                    Description = subject.Description,
+                    StudentGroupId = subject.StudentGroupId,
+                    StudentGroupName = subject.StudentGroup.Name,
+                    CourseId = subject.StudentGroup.CourseId,
+                    CourseName = subject.StudentGroup.Course.Name,
+                    FacultyId = subject.StudentGroup.Course.FacultyId,
+                    FacultyName = subject.StudentGroup.Course.Faculty.Name,
+                    TeacherId = subject.TeacherId,
+                    TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    CreatedAt = subject.CreatedAt,
+                    IsActive = subject.IsActive
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting subjects by group: {GroupId}", studentGroupId);
                 throw;
             }
         }

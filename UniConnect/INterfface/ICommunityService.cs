@@ -21,10 +21,15 @@ namespace UniConnect.INterfface
         Task<CommunityDto> GetOrCreateGroupCommunityAsync(string groupId);
 
         // User-specific methods
-        Task<List<CommunityDto>> GetUserCommunitiesAsync(string userEmail);
+        Task<List<CommunityDto>> GetUserCommunitiesAsync(string userId);
 
         // ONLY allow creation of Department communities manually
         Task<CommunityDto> CreateDepartmentCommunityAsync(CreateDepartmentCommunityDto createDepartmentDto);
+
+        // Invitations
+        Task<CommunityInvitationDto> CreateInvitationAsync(string communityId, string inviterId, string inviteeEmail);
+        Task<List<CommunityInvitationDto>> GetInvitationsForEmailAsync(string inviteeEmail);
+        Task<CommunityInvitationDto> RespondToInvitationAsync(string invitationId, string inviteeEmail, bool accept);
 
     }
 }

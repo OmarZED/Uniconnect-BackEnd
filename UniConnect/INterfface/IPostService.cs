@@ -7,8 +7,9 @@ namespace UniConnect.INterfface
     {
         // Post CRUD
         Task<PostDto> CreatePostAsync(CreatePostDto createPostDto, string authorId);
-        Task<List<PostDto>> GetCommunityPostsAsync(string communityId, int page = 1, int pageSize = 20);
-        Task<PostDto> GetPostByIdAsync(string id);
+        Task<List<PostDto>> GetCommunityPostsAsync(string communityId, string userId, int page = 1, int pageSize = 20);
+        Task<PostDto> GetPostByIdAsync(string id, string? userId = null);
+        Task<PostDto> UpdatePostAsync(string id, UpdatePostDto updatePostDto, string userId);
         Task<bool> DeletePostAsync(string id, string userId);
 
         // User feed
