@@ -19,9 +19,11 @@ namespace UniConnect.INterfface
         Task<CommunityDto> GetOrCreateFacultyCommunityAsync(string facultyId);
         Task<CommunityDto> GetOrCreateCourseCommunityAsync(string courseId);
         Task<CommunityDto> GetOrCreateGroupCommunityAsync(string groupId);
+        Task<CommunityDto> GetOrCreateSubjectCommunityAsync(string subjectId);
 
         // User-specific methods
         Task<List<CommunityDto>> GetUserCommunitiesAsync(string userId);
+        Task<List<CommunityDto>> GetOwnedCommunitiesAsync(string userId);
 
         // ONLY allow creation of Department communities manually
         Task<CommunityDto> CreateDepartmentCommunityAsync(CreateDepartmentCommunityDto createDepartmentDto);

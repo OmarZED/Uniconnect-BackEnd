@@ -95,9 +95,11 @@ public class SubjectServiceTests
         public Task<bool> LeaveCommunityAsync(string communityId, string userId) => Task.FromResult(true);
         public Task<List<CommunityMemberDto>> GetCommunityMembersAsync(string communityId) => Task.FromResult(new List<CommunityMemberDto>());
         public Task<List<CommunityDto>> GetUserCommunitiesAsync(string userEmail) => Task.FromResult(new List<CommunityDto>());
+        public Task<List<CommunityDto>> GetOwnedCommunitiesAsync(string userId) => Task.FromResult(new List<CommunityDto>());
         public Task<CommunityDto> GetOrCreateFacultyCommunityAsync(string facultyId) => Task.FromResult(new CommunityDto());
         public Task<CommunityDto> GetOrCreateCourseCommunityAsync(string courseId) => Task.FromResult(new CommunityDto());
         public Task<CommunityDto> GetOrCreateGroupCommunityAsync(string groupId) => Task.FromResult(new CommunityDto());
+        public Task<CommunityDto> GetOrCreateSubjectCommunityAsync(string subjectId) => Task.FromResult(new CommunityDto());
         public Task<CommunityDto> CreateDepartmentCommunityAsync(CreateDepartmentCommunityDto createDepartmentDto) => Task.FromResult(new CommunityDto());
 
         public Task<CommunityInvitationDto> CreateInvitationAsync(string communityId, string inviterId, string inviteeEmail) => Task.FromResult(new CommunityInvitationDto());

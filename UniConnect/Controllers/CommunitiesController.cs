@@ -791,6 +791,46 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Get communities owned by the current dean (admin membership)
+        /// </summary>
+        [Authorize(Roles = "Dean")]
+        [HttpGet("owned")]
+        [ProducesResponseType(typeof(ApiResponse<List<CommunityDto>>), 200)]
+        public async Task<IActionResult> GetOwnedCommunities()
+        {
+            try
+            {
+                var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var communities = await _communityService.GetOwnedCommunitiesAsync(userId);
+                return Ok(new ApiResponse<List<CommunityDto>>
+                {
+                    Success = true,
+                    Message = "Owned communities retrieved successfully",
+                    Data = communities
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting owned communities");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while retrieving owned communities",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
 
     }
 }

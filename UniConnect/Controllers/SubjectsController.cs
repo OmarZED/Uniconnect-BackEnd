@@ -56,20 +56,27 @@ namespace UniConnect.Controllers
                     });
                 }
 
-                // Resolve group to enforce ownership
-                var group = await _academicService.GetGroupByIdAsync(createSubjectDto.StudentGroupId);
-                if (group == null)
-                {
-                    return BadRequest(new ApiResponse<object>
-                    {
-                        Success = false,
-                        Message = "Student group not found"
-                    });
-                }
-
-                // Dean must own the faculty
                 if (role == UserRole.Dean.ToString())
                 {
+                    if (string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
+                    {
+                        return BadRequest(new ApiResponse<object>
+                        {
+                            Success = false,
+                            Message = "Student group is required for dean-created subjects"
+                        });
+                    }
+
+                    var group = await _academicService.GetGroupByIdAsync(createSubjectDto.StudentGroupId);
+                    if (group == null)
+                    {
+                        return BadRequest(new ApiResponse<object>
+                        {
+                            Success = false,
+                            Message = "Student group not found"
+                        });
+                    }
+
                     var canManage = await _authService.IsUserDeanOfFacultyAsync(userId, group.FacultyId);
                     if (!canManage)
                     {
@@ -77,17 +84,14 @@ namespace UniConnect.Controllers
                     }
                 }
 
-                // Teacher must belong to the faculty
                 if (role == UserRole.Teacher.ToString())
                 {
-                    var isInFaculty = await _authService.IsUserInFacultyAsync(userId, group.FacultyId);
-                    if (!isInFaculty)
-                    {
-                        return Forbid();
-                    }
-
-                    // Force teacher as owner
+                    // Teacher-created subjects are standalone (no group required)
                     createSubjectDto.TeacherId = userId;
+                    if (!string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
+                    {
+                        createSubjectDto.StudentGroupId = null;
+                    }
                 }
 
                 var subject = await _academicService.CreateSubjectAsync(createSubjectDto);
@@ -113,6 +117,73 @@ namespace UniConnect.Controllers
                 {
                     Success = false,
                     Message = "An error occurred while creating the subject",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
+        /// <summary>
+        /// Join a subject community by join code (Student)
+        /// </summary>
+        [Authorize(Roles = "Student")]
+        [HttpPost("join")]
+        [ProducesResponseType(typeof(ApiResponse<SubjectDto>), 200)]
+        [ProducesResponseType(typeof(ApiResponse<object>), 400)]
+        public async Task<IActionResult> JoinSubjectByCode(JoinSubjectByCodeDto joinDto)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "Invalid join code",
+                        Errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage))
+                    });
+                }
+
+                var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrWhiteSpace(userId))
+                {
+                    return Unauthorized(new ApiResponse<object>
+                    {
+                        Success = false,
+                        Message = "User not authenticated"
+                    });
+                }
+
+                var subject = await _academicService.JoinSubjectByCodeAsync(userId, joinDto.Code);
+                return Ok(new ApiResponse<SubjectDto>
+                {
+                    Success = true,
+                    Message = "Joined subject successfully",
+                    Data = subject
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error joining subject by code");
+                return StatusCode(500, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while joining the subject",
                     Errors = new[] { ex.Message }
                 });
             }

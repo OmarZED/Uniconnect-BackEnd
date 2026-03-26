@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using UniConnect.Dtos;
 using UniConnect.INterfface;
 using UniConnect.Maping;
@@ -970,6 +971,65 @@ namespace UniConnect.Repository
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
+                {
+                    if (string.IsNullOrWhiteSpace(createSubjectDto.TeacherId))
+                    {
+                        throw new InvalidOperationException("TeacherId is required when creating a subject without a student group.");
+                    }
+
+                    var subject = new Subject
+                    {
+                        Name = createSubjectDto.Name,
+                        Code = createSubjectDto.Code,
+                        Description = createSubjectDto.Description,
+                        StudentGroupId = null,
+                        TeacherId = createSubjectDto.TeacherId,
+                        JoinCode = await GenerateUniqueJoinCodeAsync(),
+                        CreatedAt = DateTime.UtcNow,
+                        IsActive = true
+                    };
+
+                    _context.Subjects.Add(subject);
+                    await _context.SaveChangesAsync();
+
+                    if (!string.IsNullOrEmpty(subject.TeacherId))
+                    {
+                        await _context.Entry(subject)
+                            .Reference(s => s.Teacher)
+                            .LoadAsync();
+                    }
+
+                    try
+                    {
+                        await _communityService.GetOrCreateSubjectCommunityAsync(subject.Id);
+                        _logger.LogInformation("Automatically created subject community for subject: {SubjectName}", subject.Name);
+                    }
+                    catch (Exception commEx)
+                    {
+                        _logger.LogError(commEx, "Failed to automatically create community for subject: {SubjectName}", subject.Name);
+                    }
+
+                    return new SubjectDto
+                    {
+                        Id = subject.Id,
+                        Name = subject.Name,
+                        Code = subject.Code,
+                        Description = subject.Description,
+                        StudentGroupId = null,
+                        StudentGroupName = null,
+                        CourseId = null,
+                        CourseName = null,
+                        FacultyId = null,
+                        FacultyName = null,
+                        TeacherId = subject.TeacherId,
+                        TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                        JoinCode = subject.JoinCode,
+                        CreatedAt = subject.CreatedAt,
+                        IsActive = subject.IsActive
+                    };
+                }
+
                 // Verify student group exists
                 var group = await _context.StudentGroups
                     .Include(g => g.Course)
@@ -992,56 +1052,68 @@ namespace UniConnect.Repository
                     throw new InvalidOperationException($"Subject with code '{createSubjectDto.Code}' already exists in this student group.");
                 }
 
-                var subject = new Subject
+                var groupedSubject = new Subject
                 {
                     Name = createSubjectDto.Name,
                     Code = createSubjectDto.Code,
                     Description = createSubjectDto.Description,
                     StudentGroupId = createSubjectDto.StudentGroupId,
                     TeacherId = createSubjectDto.TeacherId,
+                    JoinCode = await GenerateUniqueJoinCodeAsync(),
                     CreatedAt = DateTime.UtcNow,
                     IsActive = true
                 };
 
-                _context.Subjects.Add(subject);
+                _context.Subjects.Add(groupedSubject);
                 await _context.SaveChangesAsync();
 
                 // Reload with navigation
-                await _context.Entry(subject)
+                await _context.Entry(groupedSubject)
                     .Reference(s => s.StudentGroup)
                     .LoadAsync();
 
-                await _context.Entry(subject.StudentGroup)
+                await _context.Entry(groupedSubject.StudentGroup)
                     .Reference(g => g.Course)
                     .LoadAsync();
 
-                await _context.Entry(subject.StudentGroup.Course)
+                await _context.Entry(groupedSubject.StudentGroup.Course)
                     .Reference(c => c.Faculty)
                     .LoadAsync();
 
-                if (!string.IsNullOrEmpty(subject.TeacherId))
+                if (!string.IsNullOrEmpty(groupedSubject.TeacherId))
                 {
-                    await _context.Entry(subject)
+                    await _context.Entry(groupedSubject)
                         .Reference(s => s.Teacher)
                         .LoadAsync();
                 }
 
+                try
+                {
+                    await _communityService.GetOrCreateSubjectCommunityAsync(groupedSubject.Id);
+                    _logger.LogInformation("Automatically created subject community for subject: {SubjectName}", groupedSubject.Name);
+                }
+                catch (Exception commEx)
+                {
+                    _logger.LogError(commEx, "Failed to automatically create community for subject: {SubjectName}", groupedSubject.Name);
+                }
+
                 return new SubjectDto
                 {
-                    Id = subject.Id,
-                    Name = subject.Name,
-                    Code = subject.Code,
-                    Description = subject.Description,
-                    StudentGroupId = subject.StudentGroupId,
-                    StudentGroupName = subject.StudentGroup.Name,
-                    CourseId = subject.StudentGroup.CourseId,
-                    CourseName = subject.StudentGroup.Course.Name,
-                    FacultyId = subject.StudentGroup.Course.FacultyId,
-                    FacultyName = subject.StudentGroup.Course.Faculty.Name,
-                    TeacherId = subject.TeacherId,
-                    TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
-                    CreatedAt = subject.CreatedAt,
-                    IsActive = subject.IsActive
+                    Id = groupedSubject.Id,
+                    Name = groupedSubject.Name,
+                    Code = groupedSubject.Code,
+                    Description = groupedSubject.Description,
+                    StudentGroupId = groupedSubject.StudentGroupId,
+                    StudentGroupName = groupedSubject.StudentGroup?.Name,
+                    CourseId = groupedSubject.StudentGroup?.CourseId,
+                    CourseName = groupedSubject.StudentGroup?.Course?.Name,
+                    FacultyId = groupedSubject.StudentGroup?.Course?.FacultyId,
+                    FacultyName = groupedSubject.StudentGroup?.Course?.Faculty?.Name,
+                    TeacherId = groupedSubject.TeacherId,
+                    TeacherName = groupedSubject.Teacher != null ? $"{groupedSubject.Teacher.FirstName} {groupedSubject.Teacher.LastName}" : null,
+                    JoinCode = groupedSubject.JoinCode,
+                    CreatedAt = groupedSubject.CreatedAt,
+                    IsActive = groupedSubject.IsActive
                 };
             }
             catch (Exception ex)
@@ -1071,13 +1143,14 @@ namespace UniConnect.Repository
                     Code = subject.Code,
                     Description = subject.Description,
                     StudentGroupId = subject.StudentGroupId,
-                    StudentGroupName = subject.StudentGroup.Name,
-                    CourseId = subject.StudentGroup.CourseId,
-                    CourseName = subject.StudentGroup.Course.Name,
-                    FacultyId = subject.StudentGroup.Course.FacultyId,
-                    FacultyName = subject.StudentGroup.Course.Faculty.Name,
+                    StudentGroupName = subject.StudentGroup?.Name,
+                    CourseId = subject.StudentGroup?.CourseId,
+                    CourseName = subject.StudentGroup?.Course?.Name,
+                    FacultyId = subject.StudentGroup?.Course?.FacultyId,
+                    FacultyName = subject.StudentGroup?.Course?.Faculty?.Name,
                     TeacherId = subject.TeacherId,
                     TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    JoinCode = subject.JoinCode,
                     CreatedAt = subject.CreatedAt,
                     IsActive = subject.IsActive
                 };
@@ -1116,6 +1189,7 @@ namespace UniConnect.Repository
                     FacultyName = subject.StudentGroup.Course.Faculty.Name,
                     TeacherId = subject.TeacherId,
                     TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    JoinCode = subject.JoinCode,
                     CreatedAt = subject.CreatedAt,
                     IsActive = subject.IsActive
                 }).ToList();
@@ -1125,6 +1199,96 @@ namespace UniConnect.Repository
                 _logger.LogError(ex, "Error getting subjects by group: {GroupId}", studentGroupId);
                 throw;
             }
+        }
+
+        public async Task<SubjectDto> JoinSubjectByCodeAsync(string userId, string code)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    throw new InvalidOperationException("Join code is required.");
+                }
+
+                var normalizedCode = code.Trim().ToUpperInvariant();
+                var subject = await _context.Subjects
+                    .Include(s => s.Teacher)
+                    .Include(s => s.StudentGroup)
+                        .ThenInclude(g => g.Course)
+                            .ThenInclude(c => c.Faculty)
+                    .FirstOrDefaultAsync(s => s.JoinCode == normalizedCode && s.IsActive);
+
+                if (subject == null)
+                {
+                    throw new KeyNotFoundException("Subject not found for this code.");
+                }
+
+                var community = await _context.Communities
+                    .FirstOrDefaultAsync(c => c.SubjectId == subject.Id && c.Type == CommunityType.Subject && c.IsActive);
+
+                if (community == null)
+                {
+                    var created = await _communityService.GetOrCreateSubjectCommunityAsync(subject.Id);
+                    community = await _context.Communities.FirstOrDefaultAsync(c => c.Id == created.Id);
+                }
+
+                if (community == null)
+                {
+                    throw new InvalidOperationException("Subject community could not be found or created.");
+                }
+
+                try
+                {
+                    await _communityService.JoinCommunityAsync(community.Id, userId);
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("already a member", StringComparison.OrdinalIgnoreCase))
+                {
+                    // No-op: already joined
+                }
+
+                return new SubjectDto
+                {
+                    Id = subject.Id,
+                    Name = subject.Name,
+                    Code = subject.Code,
+                    Description = subject.Description,
+                    StudentGroupId = subject.StudentGroupId,
+                    StudentGroupName = subject.StudentGroup?.Name,
+                    CourseId = subject.StudentGroup?.CourseId,
+                    CourseName = subject.StudentGroup?.Course?.Name,
+                    FacultyId = subject.StudentGroup?.Course?.FacultyId,
+                    FacultyName = subject.StudentGroup?.Course?.Faculty?.Name,
+                    TeacherId = subject.TeacherId,
+                    TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    JoinCode = subject.JoinCode,
+                    CreatedAt = subject.CreatedAt,
+                    IsActive = subject.IsActive
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error joining subject by code");
+                throw;
+            }
+        }
+
+        private async Task<string> GenerateUniqueJoinCodeAsync()
+        {
+            const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            for (var attempt = 0; attempt < 20; attempt++)
+            {
+                var code = new string(Enumerable.Range(0, 6)
+                    .Select(_ => alphabet[Random.Shared.Next(alphabet.Length)])
+                    .ToArray());
+
+                var exists = await _context.Subjects.AnyAsync(s => s.JoinCode == code);
+                if (!exists)
+                {
+                    return code;
+                }
+            }
+
+            return Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
         }
 
     }

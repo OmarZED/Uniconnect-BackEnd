@@ -16,15 +16,16 @@ namespace UniConnect.Dtos
 
         public string? Description { get; set; }
 
-        public string StudentGroupId { get; set; }
-        public string StudentGroupName { get; set; }
-        public string CourseId { get; set; }
-        public string CourseName { get; set; }
-        public string FacultyId { get; set; }
-        public string FacultyName { get; set; }
+        public string? StudentGroupId { get; set; }
+        public string? StudentGroupName { get; set; }
+        public string? CourseId { get; set; }
+        public string? CourseName { get; set; }
+        public string? FacultyId { get; set; }
+        public string? FacultyName { get; set; }
 
         public string? TeacherId { get; set; }
         public string? TeacherName { get; set; }
+        public string JoinCode { get; set; }
 
         public DateTime CreatedAt { get; set; }
         public bool IsActive { get; set; }
@@ -42,10 +43,16 @@ namespace UniConnect.Dtos
 
         public string? Description { get; set; }
 
-        [Required]
-        public string StudentGroupId { get; set; }
+        public string? StudentGroupId { get; set; }
 
         // Optional: dean can assign a teacher, teacher will be forced to self
         public string? TeacherId { get; set; }
+    }
+
+    public class JoinSubjectByCodeDto
+    {
+        [Required]
+        [StringLength(12, MinimumLength = 4)]
+        public string Code { get; set; }
     }
 }

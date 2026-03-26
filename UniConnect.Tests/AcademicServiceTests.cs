@@ -221,10 +221,12 @@ public class AcademicServiceTests
         public Task<bool> LeaveCommunityAsync(string communityId, string userId) => Task.FromResult(true);
         public Task<List<CommunityMemberDto>> GetCommunityMembersAsync(string communityId) => Task.FromResult(new List<CommunityMemberDto>());
         public Task<List<CommunityDto>> GetUserCommunitiesAsync(string userEmail) => Task.FromResult(new List<CommunityDto>());
+        public Task<List<CommunityDto>> GetOwnedCommunitiesAsync(string userId) => Task.FromResult(new List<CommunityDto>());
 
         public Task<CommunityDto> GetOrCreateFacultyCommunityAsync(string facultyId) => Task.FromResult(CreateCommunity(facultyId, "Faculty Community"));
         public Task<CommunityDto> GetOrCreateCourseCommunityAsync(string courseId) => Task.FromResult(CreateCommunity(courseId, "Course Community"));
         public Task<CommunityDto> GetOrCreateGroupCommunityAsync(string groupId) => Task.FromResult(CreateCommunity(groupId, "Group Community"));
+        public Task<CommunityDto> GetOrCreateSubjectCommunityAsync(string subjectId) => Task.FromResult(CreateCommunity(subjectId, "Subject Community"));
         public Task<CommunityDto> CreateDepartmentCommunityAsync(CreateDepartmentCommunityDto createDepartmentDto) => Task.FromResult(CreateCommunity(Guid.NewGuid().ToString(), createDepartmentDto.Name));
 
         public Task<CommunityInvitationDto> CreateInvitationAsync(string communityId, string inviterId, string inviteeEmail) => Task.FromResult(new CommunityInvitationDto());

@@ -23,6 +23,7 @@ namespace UniConnect.Models
         public string? FacultyId { get; set; }
         public string? CourseId { get; set; }
         public string? StudentGroupId { get; set; }
+        public string? SubjectId { get; set; }
 
         // Navigation properties
         [ForeignKey("FacultyId")]
@@ -33,6 +34,9 @@ namespace UniConnect.Models
 
         [ForeignKey("StudentGroupId")]
         public virtual StudentGroup? StudentGroup { get; set; }
+
+        [ForeignKey("SubjectId")]
+        public virtual Subject? Subject { get; set; }
 
         // Community settings
         public bool IsActive { get; set; } = true;
@@ -60,6 +64,7 @@ namespace UniConnect.Models
         Faculty,    // Academic - Auto created
         Course,     // Academic - Auto created  
         Group,      // Academic - Auto created
+        Subject,    // Teacher-created subject community
         Department  // Administrative - Manual membership
     }
 }

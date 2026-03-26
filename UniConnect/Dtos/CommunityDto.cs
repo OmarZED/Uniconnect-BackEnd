@@ -27,6 +27,9 @@ namespace UniConnect.Dtos
         public string? StudentGroupId { get; set; }
         public string? StudentGroupName { get; set; }
 
+        public string? SubjectId { get; set; }
+        public string? SubjectName { get; set; }
+
         // Community stats
         public int MemberCount { get; set; }
         public int PostCount { get; set; }
@@ -61,6 +64,7 @@ namespace UniConnect.Dtos
         public string? FacultyId { get; set; }
         public string? CourseId { get; set; }
         public string? StudentGroupId { get; set; }
+        public string? SubjectId { get; set; }
 
         // Settings
         public bool AllowPosts { get; set; } = true;

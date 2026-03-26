@@ -17,17 +17,20 @@ namespace UniConnect.Models
 
         public string? Description { get; set; }
 
-        [Required]
-        public string StudentGroupId { get; set; }
+        public string? StudentGroupId { get; set; }
 
         [ForeignKey("StudentGroupId")]
-        public virtual StudentGroup StudentGroup { get; set; }
+        public virtual StudentGroup? StudentGroup { get; set; }
 
         // Optional: subject may be assigned to a teacher
         public string? TeacherId { get; set; }
 
         [ForeignKey("TeacherId")]
         public virtual ApplicationUser? Teacher { get; set; }
+
+        [Required]
+        [StringLength(12)]
+        public string JoinCode { get; set; } = string.Empty;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsActive { get; set; } = true;

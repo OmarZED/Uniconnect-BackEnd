@@ -203,6 +203,7 @@ public class AuthServiceTests
         public Task<bool> LeaveCommunityAsync(string communityId, string userId) => Task.FromResult(true);
         public Task<List<CommunityMemberDto>> GetCommunityMembersAsync(string communityId) => Task.FromResult(new List<CommunityMemberDto>());
         public Task<List<CommunityDto>> GetUserCommunitiesAsync(string userEmail) => Task.FromResult(new List<CommunityDto>());
+        public Task<List<CommunityDto>> GetOwnedCommunitiesAsync(string userId) => Task.FromResult(new List<CommunityDto>());
 
         public Task<CommunityDto> GetOrCreateFacultyCommunityAsync(string facultyId) =>
             Task.FromResult(new CommunityDto { Id = facultyId, Name = "Faculty", Type = CommunityType.Faculty, CreatedAt = DateTime.UtcNow, IsActive = true });
@@ -212,6 +213,9 @@ public class AuthServiceTests
 
         public Task<CommunityDto> GetOrCreateGroupCommunityAsync(string groupId) =>
             Task.FromResult(new CommunityDto { Id = groupId, Name = "Group", Type = CommunityType.Group, CreatedAt = DateTime.UtcNow, IsActive = true });
+
+        public Task<CommunityDto> GetOrCreateSubjectCommunityAsync(string subjectId) =>
+            Task.FromResult(new CommunityDto { Id = subjectId, Name = "Subject", Type = CommunityType.Subject, CreatedAt = DateTime.UtcNow, IsActive = true });
 
         public Task<CommunityDto> CreateDepartmentCommunityAsync(CreateDepartmentCommunityDto createDepartmentDto) =>
             Task.FromResult(new CommunityDto { Id = Guid.NewGuid().ToString(), Name = createDepartmentDto.Name, Type = CommunityType.Department, CreatedAt = DateTime.UtcNow, IsActive = true });

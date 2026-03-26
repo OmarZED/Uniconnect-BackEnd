@@ -34,6 +34,7 @@ namespace UniConnect.INterfface
         Task<SubjectDto> CreateSubjectAsync(CreateSubjectDto createSubjectDto);
         Task<SubjectDto> GetSubjectByIdAsync(string id);
         Task<List<SubjectDto>> GetSubjectsByGroupAsync(string studentGroupId);
+        Task<SubjectDto> JoinSubjectByCodeAsync(string userId, string code);
 
         // Helper methods for dropdowns
         Task<List<FacultyDto>> GetActiveFacultiesAsync();

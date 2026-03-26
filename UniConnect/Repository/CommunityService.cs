@@ -32,6 +32,7 @@ namespace UniConnect.Repository
                     .Include(c => c.Faculty)
                     .Include(c => c.Course)
                     .Include(c => c.StudentGroup)
+                    .Include(c => c.Subject)
                     .Include(c => c.Members)
                     .Include(c => c.Posts) // ADDED THIS - CRITICAL
                     .Where(c => c.IsActive)
@@ -56,6 +57,7 @@ namespace UniConnect.Repository
                     .Include(c => c.Faculty)
                     .Include(c => c.Course)
                     .Include(c => c.StudentGroup)
+                    .Include(c => c.Subject)
                     .Include(c => c.Members)
                     .Include(c => c.Posts) // ADDED THIS - CRITICAL
                     .FirstOrDefaultAsync(c => c.Id == id && c.IsActive);
@@ -608,6 +610,75 @@ namespace UniConnect.Repository
             }
         }
 
+        public async Task<CommunityDto> GetOrCreateSubjectCommunityAsync(string subjectId)
+        {
+            try
+            {
+                var subject = await _context.Subjects
+                    .Include(s => s.Teacher)
+                    .FirstOrDefaultAsync(s => s.Id == subjectId && s.IsActive);
+
+                if (subject == null)
+                {
+                    throw new KeyNotFoundException($"Subject with ID '{subjectId}' not found.");
+                }
+
+                var existingCommunity = await _context.Communities
+                    .Include(c => c.Posts)
+                    .FirstOrDefaultAsync(c => c.SubjectId == subjectId && c.Type == CommunityType.Subject && c.IsActive);
+
+                if (existingCommunity != null)
+                {
+                    var existingUser = await GetCurrentUserAsync();
+                    if (existingUser != null)
+                    {
+                        await EnsureUserMembershipAsync(existingCommunity.Id, existingUser.Id, CommunityRole.Admin);
+                    }
+
+                    return MapToCommunityDto(existingCommunity, existingUser?.Id);
+                }
+
+                var currentUser = await GetCurrentUserAsync();
+                var adminUserId = currentUser?.Id ?? subject.TeacherId ?? "system";
+
+                var community = new Community
+                {
+                    Name = $"{subject.Name} Subject",
+                    Description = subject.Description ?? $"Subject community for {subject.Name}",
+                    Type = CommunityType.Subject,
+                    SubjectId = subjectId,
+                    AllowPosts = true,
+                    AutoJoin = false,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                _context.Communities.Add(community);
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrWhiteSpace(adminUserId) && adminUserId != "system")
+                {
+                    _context.CommunityMembers.Add(new CommunityMember
+                    {
+                        CommunityId = community.Id,
+                        UserId = adminUserId,
+                        Role = CommunityRole.Admin,
+                        JoinedAt = DateTime.UtcNow,
+                        IsActive = true
+                    });
+
+                    await _context.SaveChangesAsync();
+                }
+
+                return MapToCommunityDto(community, adminUserId == "system" ? null : adminUserId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting/creating subject community for subject: {SubjectId}", subjectId);
+                throw;
+            }
+        }
+
         // User-specific methods
         public async Task<List<CommunityDto>> GetUserCommunitiesAsync(string userId)
         {
@@ -634,6 +705,8 @@ namespace UniConnect.Repository
                     .Include(cm => cm.Community)
                         .ThenInclude(c => c.StudentGroup)
                     .Include(cm => cm.Community)
+                        .ThenInclude(c => c.Subject)
+                    .Include(cm => cm.Community)
                         .ThenInclude(c => c.Members)
                     .Include(cm => cm.Community)
                         .ThenInclude(c => c.Posts) // ADDED THIS
@@ -659,6 +732,8 @@ namespace UniConnect.Repository
                         CourseName = community.Course?.Name,
                         StudentGroupId = community.StudentGroupId,
                         StudentGroupName = community.StudentGroup?.Name,
+                        SubjectId = community.SubjectId,
+                        SubjectName = community.Subject?.Name,
                         MemberCount = community.Members.Count(m => m.IsActive),
                         PostCount = community.Posts.Count(p => p.IsActive),
                         AllowPosts = community.AllowPosts,
@@ -676,6 +751,83 @@ namespace UniConnect.Repository
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting user communities for user: {UserId}", userId);
+                throw;
+            }
+        }
+
+        public async Task<List<CommunityDto>> GetOwnedCommunitiesAsync(string userId)
+        {
+            try
+            {
+                _logger.LogInformation("🔍 Getting owned communities for user: {UserId}", userId);
+
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == userId);
+
+                if (user == null)
+                {
+                    _logger.LogWarning("User not found with id: {UserId}", userId);
+                    return new List<CommunityDto>();
+                }
+
+                var adminMemberships = await _context.CommunityMembers
+                    .Include(cm => cm.Community)
+                        .ThenInclude(c => c.Faculty)
+                    .Include(cm => cm.Community)
+                        .ThenInclude(c => c.Course)
+                    .Include(cm => cm.Community)
+                        .ThenInclude(c => c.StudentGroup)
+                    .Include(cm => cm.Community)
+                        .ThenInclude(c => c.Subject)
+                    .Include(cm => cm.Community)
+                        .ThenInclude(c => c.Members)
+                    .Include(cm => cm.Community)
+                        .ThenInclude(c => c.Posts)
+                    .Where(cm =>
+                        cm.UserId == user.Id &&
+                        cm.IsActive &&
+                        cm.Role == CommunityRole.Admin &&
+                        cm.Community.IsActive)
+                    .OrderBy(cm => cm.Community.Type)
+                    .ThenBy(cm => cm.Community.Name)
+                    .ToListAsync();
+
+                _logger.LogInformation("Found {Count} owned communities for user {UserId}", adminMemberships.Count, userId);
+
+                var communities = adminMemberships.Select(m =>
+                {
+                    var community = m.Community;
+                    return new CommunityDto
+                    {
+                        Id = community.Id,
+                        Name = community.Name,
+                        Description = community.Description,
+                        Type = community.Type,
+                        FacultyId = community.FacultyId,
+                        FacultyName = community.Faculty?.Name,
+                        CourseId = community.CourseId,
+                        CourseName = community.Course?.Name,
+                        StudentGroupId = community.StudentGroupId,
+                        StudentGroupName = community.StudentGroup?.Name,
+                        SubjectId = community.SubjectId,
+                        SubjectName = community.Subject?.Name,
+                        MemberCount = community.Members.Count(x => x.IsActive),
+                        PostCount = community.Posts.Count(p => p.IsActive),
+                        AllowPosts = community.AllowPosts,
+                        AutoJoin = community.AutoJoin,
+                        CreatedAt = community.CreatedAt,
+                        UpdatedAt = community.UpdatedAt,
+                        IsActive = community.IsActive,
+                        CurrentUserRole = m.Role,
+                        IsCurrentUserMember = true
+                    };
+                }).ToList();
+
+                return communities;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting owned communities for user: {UserId}", userId);
                 throw;
             }
         }
@@ -874,6 +1026,8 @@ namespace UniConnect.Repository
                 CourseName = community.Course?.Name,
                 StudentGroupId = community.StudentGroupId,
                 StudentGroupName = community.StudentGroup?.Name,
+                SubjectId = community.SubjectId,
+                SubjectName = community.Subject?.Name,
                 MemberCount = community.Members?.Count(m => m.IsActive) ?? 0,
                 PostCount = community.Posts?.Count(p => p.IsActive) ?? 0,
                 AllowPosts = community.AllowPosts,
