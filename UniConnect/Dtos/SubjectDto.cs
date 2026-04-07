@@ -45,8 +45,9 @@ namespace UniConnect.Dtos
 
         public string? StudentGroupId { get; set; }
 
-        // Optional: dean can assign a teacher, teacher will be forced to self
-        public string? TeacherId { get; set; }
+        // Dean must assign a teacher (subject owner)
+        [Required]
+        public string TeacherId { get; set; }
     }
 
     public class JoinSubjectByCodeDto

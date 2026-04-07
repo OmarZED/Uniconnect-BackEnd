@@ -32,6 +32,7 @@ namespace UniConnect.Repository
 
                 if (!string.Equals(subject.TeacherId, teacherId, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Only the subject owner can create tasks.
                     throw new UnauthorizedAccessException("Only the subject owner can create tasks.");
                 }
 
@@ -84,6 +85,7 @@ namespace UniConnect.Repository
 
                 if (!isTeacherOwner && !isMember)
                 {
+                    // Teachers own subjects; students must be subject community members to view tasks.
                     throw new UnauthorizedAccessException("User is not authorized to view tasks for this subject.");
                 }
 

@@ -336,6 +336,38 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Get all active teachers (Dean only)
+        /// </summary>
+        /// <returns>List of teachers</returns>
+        /// <returns>List of teachers</returns>
+        [Authorize(Roles = "Dean")]
+        [HttpGet("teachers")]
+        [ProducesResponseType(typeof(ApiResponse<IEnumerable<UserDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GetTeachers()
+        {
+            try
+            {
+                var teachers = await _authService.GetTeachersAsync();
+                return Ok(new ApiResponse<IEnumerable<UserDto>>
+                {
+                    Success = true,
+                    Message = "Teachers retrieved successfully",
+                    Data = teachers
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving teachers");
+                return StatusCode(StatusCodes.Status500InternalServerError, new ApiResponse<object>
+                {
+                    Success = false,
+                    Message = "An error occurred while retrieving teachers",
+                    Errors = new[] { ex.Message }
+                });
+            }
+        }
+
         [Authorize]
         [HttpGet("debug-roles")]
         public async Task<IActionResult> DebugRoles()

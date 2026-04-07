@@ -33,6 +33,7 @@ namespace UniConnect.Repository
                     throw new InvalidOperationException("Task not found.");
                 }
 
+                // Enforce that student belongs to the subject community before submitting.
                 await EnsureStudentIsSubjectMember(task.SubjectId, studentId);
 
                 var existing = await _context.Submissions
@@ -43,6 +44,7 @@ namespace UniConnect.Repository
 
                 if (existing != null)
                 {
+                    // Single submission per task; allow edits until graded.
                     if (existing.Status == SubmissionStatus.Graded)
                     {
                         throw new InvalidOperationException("Submission already graded and cannot be updated.");
@@ -101,6 +103,7 @@ namespace UniConnect.Repository
 
                 if (!string.Equals(task.Subject?.TeacherId, teacherId, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Only the subject owner can view submissions for this task.
                     throw new UnauthorizedAccessException("Only the subject owner can view submissions.");
                 }
 
@@ -173,11 +176,13 @@ namespace UniConnect.Repository
 
                 if (!string.Equals(submission.StudentId, studentId, StringComparison.OrdinalIgnoreCase))
                 {
+                    // Students can only update their own submission.
                     throw new UnauthorizedAccessException("Student not authorized to update this submission.");
                 }
 
                 if (submission.Status == SubmissionStatus.Graded)
                 {
+                    // Lock submission once graded.
                     throw new InvalidOperationException("Submission already graded and cannot be updated.");
                 }
 

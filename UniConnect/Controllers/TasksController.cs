@@ -21,6 +21,9 @@ namespace UniConnect.Controllers
             _logger = logger;
         }
 
+        /// <summary>
+        /// Create a task for a subject (Teacher only; must own subject).
+        /// </summary>
         [Authorize(Roles = "Teacher")]
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<TaskDto>), 200)]
@@ -81,6 +84,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Get tasks for a subject (Teacher owner or Student member of subject community).
+        /// </summary>
         [Authorize]
         [HttpGet("subject/{subjectId}")]
         [ProducesResponseType(typeof(ApiResponse<List<TaskDto>>), 200)]
@@ -130,6 +136,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Get task by ID (Teacher owner or Student member).
+        /// </summary>
         [Authorize]
         [HttpGet("{id}")]
         [ProducesResponseType(typeof(ApiResponse<TaskDto>), 200)]
@@ -181,6 +190,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Update a task (Teacher only; must own subject).
+        /// </summary>
         [Authorize(Roles = "Teacher")]
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(ApiResponse<TaskDto>), 200)]
@@ -230,6 +242,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Delete a task (Teacher only; must own subject).
+        /// </summary>
         [Authorize(Roles = "Teacher")]
         [HttpDelete("{id}")]
         [ProducesResponseType(typeof(ApiResponse<object>), 200)]

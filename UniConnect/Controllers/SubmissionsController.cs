@@ -22,6 +22,9 @@ namespace UniConnect.Controllers
             _logger = logger;
         }
 
+        /// <summary>
+        /// Create a submission for a task (Student only). Single submission per task; edits allowed until graded.
+        /// </summary>
         [Authorize(Roles = "Student")]
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<SubmissionDto>), 200)]
@@ -81,6 +84,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Get all submissions for a task (Teacher only).
+        /// </summary>
         [Authorize(Roles = "Teacher")]
         [HttpGet("/api/tasks/{taskId}/submissions")]
         [ProducesResponseType(typeof(ApiResponse<List<SubmissionDto>>), 200)]
@@ -130,6 +136,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Get a submission by ID (Teacher for owned subject or owner Student).
+        /// </summary>
         [Authorize]
         [HttpGet("{id}")]
         [ProducesResponseType(typeof(ApiResponse<SubmissionDto>), 200)]
@@ -184,6 +193,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Update a submission (Student only). Not allowed after grading.
+        /// </summary>
         [Authorize(Roles = "Student")]
         [HttpPut("{id}")]
         [ProducesResponseType(typeof(ApiResponse<SubmissionDto>), 200)]
@@ -251,6 +263,9 @@ namespace UniConnect.Controllers
             }
         }
 
+        /// <summary>
+        /// Grade a submission (Teacher only for owned subject).
+        /// </summary>
         [Authorize(Roles = "Teacher")]
         [HttpPut("{id}/grade")]
         [ProducesResponseType(typeof(ApiResponse<SubmissionDto>), 200)]

@@ -12,6 +12,7 @@ namespace UniConnect.INterfface
         Task<LogoutResult> LogoutAsync();
         Task<UserDto> GetCurrentUserAsync(string userId);
         Task<UserDto> GetCurrentUserByEmailAsync(string email);
+        Task<List<UserDto>> GetTeachersAsync();
         Task<AuthResult> UpdateProfileByEmailAsync(string email, UpdateProfileDto updateProfileDto);
 
         // Role Checking Methods (UPDATED - No more AdminType)

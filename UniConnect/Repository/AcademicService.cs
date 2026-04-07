@@ -976,6 +976,19 @@ namespace UniConnect.Repository
                     throw new InvalidOperationException("TeacherId is required for subject creation.");
                 }
 
+                var teacher = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Id == createSubjectDto.TeacherId && u.IsActive);
+
+                if (teacher == null)
+                {
+                    throw new InvalidOperationException("Assigned teacher not found.");
+                }
+
+                if (teacher.Role != UserRole.Teacher)
+                {
+                    throw new InvalidOperationException("Assigned user must have Teacher role.");
+                }
+
                 StudentGroup? group = null;
                 if (!string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
                 {

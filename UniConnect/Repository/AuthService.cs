@@ -303,6 +303,21 @@ namespace UniConnect.Repository
             return await CreateUserDtoAsync(user);
         }
 
+        public async Task<List<UserDto>> GetTeachersAsync()
+        {
+            var teachers = await _userManager.Users
+                .Where(u => u.Role == UserRole.Teacher && u.IsActive)
+                .ToListAsync();
+
+            var results = new List<UserDto>();
+            foreach (var teacher in teachers)
+            {
+                results.Add(await CreateUserDtoAsync(teacher));
+            }
+
+            return results;
+        }
+
         // Role Checking Methods
         public async Task<bool> IsUserInRoleAsync(string userId, UserRole role)
         {

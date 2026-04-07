@@ -670,6 +670,20 @@ namespace UniConnect.Repository
                     await _context.SaveChangesAsync();
                 }
 
+                if (!string.IsNullOrWhiteSpace(subject.TeacherId) && subject.TeacherId != adminUserId)
+                {
+                    _context.CommunityMembers.Add(new CommunityMember
+                    {
+                        CommunityId = community.Id,
+                        UserId = subject.TeacherId,
+                        Role = CommunityRole.Admin,
+                        JoinedAt = DateTime.UtcNow,
+                        IsActive = true
+                    });
+
+                    await _context.SaveChangesAsync();
+                }
+
                 return MapToCommunityDto(community, adminUserId == "system" ? null : adminUserId);
             }
             catch (Exception ex)
