@@ -1,6 +1,6 @@
 # UniConnect Backend
 
-Backend API for **UniConnect**, a university collaboration platform that supports academic communities, posts, comments, tasks, notifications, and role-based management (Student, Teacher, Dean, Department Manager).
+Backend API for **UniConnect**, a university collaboration platform that supports academic communities, posts, comments, tasks, submissions, notifications, and role-based management (Student, Teacher, Dean, Department Manager).
 
 This repository contains the .NET backend services, data models, and REST APIs used by the UniConnect frontend.
 
@@ -11,6 +11,7 @@ This repository contains the .NET backend services, data models, and REST APIs u
 - **Academic Structure**: Faculties, Courses, Student Groups, Subjects.
 - **Communities**: Auto-created academic communities + manual department communities.
 - **Posts & Comments**: Create, edit, delete, and react to posts.
+- **Tasks & Submissions**: Teachers create tasks; students submit once (editable until graded); teachers grade with numeric score + feedback.
 - **Invitations**: Community invitation flow.
 - **Subject Join Codes**: Teachers create subjects with a join code for students.
 - **Testing**: Unit tests using xUnit + EF InMemory.
@@ -23,6 +24,13 @@ This repository contains the .NET backend services, data models, and REST APIs u
 - **SQL Server**
 - **JWT Authentication**
 - **xUnit** (unit tests)
+
+---
+
+## Role Capabilities (High-Level)
+- **Student**: Join subject communities by code, create posts, comment/react, submit tasks, view grades.
+- **Teacher**: Create subjects, create tasks, view submissions, grade students.
+- **Dean / Department Manager**: Manage academic structure and communities.
 
 ---
 
