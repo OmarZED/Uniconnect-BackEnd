@@ -27,7 +27,7 @@ namespace UniConnect.Controllers
         /// <summary>
         /// Create a subject (Dean or Teacher)
         /// </summary>
-        [Authorize(Roles = "Dean,Teacher")]
+        [Authorize(Roles = "Dean")]
         [HttpPost]
         [ProducesResponseType(typeof(ApiResponse<SubjectDto>), 200)]
         [ProducesResponseType(typeof(ApiResponse<object>), 400)]
@@ -56,17 +56,17 @@ namespace UniConnect.Controllers
                     });
                 }
 
-                if (role == UserRole.Dean.ToString())
+                if (string.IsNullOrWhiteSpace(createSubjectDto.TeacherId))
                 {
-                    if (string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
+                    return BadRequest(new ApiResponse<object>
                     {
-                        return BadRequest(new ApiResponse<object>
-                        {
-                            Success = false,
-                            Message = "Student group is required for dean-created subjects"
-                        });
-                    }
+                        Success = false,
+                        Message = "TeacherId is required for subject creation"
+                    });
+                }
 
+                if (!string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
+                {
                     var group = await _academicService.GetGroupByIdAsync(createSubjectDto.StudentGroupId);
                     if (group == null)
                     {
@@ -81,16 +81,6 @@ namespace UniConnect.Controllers
                     if (!canManage)
                     {
                         return Forbid();
-                    }
-                }
-
-                if (role == UserRole.Teacher.ToString())
-                {
-                    // Teacher-created subjects are standalone (no group required)
-                    createSubjectDto.TeacherId = userId;
-                    if (!string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
-                    {
-                        createSubjectDto.StudentGroupId = null;
                     }
                 }
 

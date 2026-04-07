@@ -17,6 +17,8 @@ namespace UniConnect.Maping
         public DbSet<Course> Courses { get; set; }
         public DbSet<StudentGroup> StudentGroups { get; set; }
         public DbSet<Subject> Subjects { get; set; }
+        public DbSet<TaskAssignment> TaskAssignments { get; set; }
+        public DbSet<Submission> Submissions { get; set; }
 
         // === COMMUNITY DB SETS ===
         public DbSet<Community> Communities { get; set; }
@@ -192,6 +194,70 @@ namespace UniConnect.Maping
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
+            // Configure TaskAssignment entity
+            modelBuilder.Entity<TaskAssignment>(entity =>
+            {
+                entity.Property(t => t.Title)
+                    .IsRequired()
+                    .HasMaxLength(200);
+
+                entity.Property(t => t.Description)
+                    .IsRequired();
+
+                entity.Property(t => t.MaxScore)
+                    .IsRequired();
+
+                entity.Property(t => t.CreatedAt)
+                    .IsRequired();
+
+                entity.Property(t => t.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.HasOne(t => t.Subject)
+                    .WithMany()
+                    .HasForeignKey(t => t.SubjectId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(t => t.CreatedByTeacher)
+                    .WithMany()
+                    .HasForeignKey(t => t.CreatedByTeacherId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // Configure Submission entity
+            modelBuilder.Entity<Submission>(entity =>
+            {
+                entity.Property(s => s.Content)
+                    .IsRequired();
+
+                entity.Property(s => s.Status)
+                    .IsRequired()
+                    .HasConversion<string>()
+                    .HasMaxLength(20);
+
+                entity.Property(s => s.SubmittedAt)
+                    .IsRequired();
+
+                entity.Property(s => s.CreatedAt)
+                    .IsRequired();
+
+                entity.Property(s => s.IsActive)
+                    .HasDefaultValue(true);
+
+                entity.HasIndex(s => new { s.TaskId, s.StudentId })
+                    .IsUnique();
+
+                entity.HasOne(s => s.Task)
+                    .WithMany(t => t.Submissions)
+                    .HasForeignKey(s => s.TaskId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(s => s.Student)
+                    .WithMany()
+                    .HasForeignKey(s => s.StudentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
             // === COMMUNITY CONFIGURATIONS ===
 
             // Configure Community entity
@@ -236,6 +302,11 @@ namespace UniConnect.Maping
                 entity.HasOne(c => c.StudentGroup)
                     .WithMany()
                     .HasForeignKey(c => c.StudentGroupId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(c => c.Subject)
+                    .WithMany()
+                    .HasForeignKey(c => c.SubjectId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 

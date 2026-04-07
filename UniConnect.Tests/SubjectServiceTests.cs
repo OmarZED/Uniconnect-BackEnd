@@ -45,7 +45,8 @@ public class SubjectServiceTests
         {
             Name = "Algorithms",
             Code = "ALG",
-            StudentGroupId = group.Id
+            StudentGroupId = group.Id,
+            TeacherId = Guid.NewGuid().ToString()
         });
 
         Assert.Equal(group.Id, subject.StudentGroupId);
@@ -74,14 +75,16 @@ public class SubjectServiceTests
         {
             Name = "Algorithms",
             Code = "ALG",
-            StudentGroupId = group.Id
+            StudentGroupId = group.Id,
+            TeacherId = Guid.NewGuid().ToString()
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreateSubjectAsync(new CreateSubjectDto
         {
             Name = "Algorithms 2",
             Code = "ALG",
-            StudentGroupId = group.Id
+            StudentGroupId = group.Id,
+            TeacherId = Guid.NewGuid().ToString()
         }));
     }
 

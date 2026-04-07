@@ -161,6 +161,8 @@ builder.Services.AddScoped<IAcademicService, AcademicService>();
 builder.Services.AddScoped<ICommunityService, CommunityService>();
 builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<ICommentService, CommentService>();
+builder.Services.AddScoped<ITaskService, TaskService>();
+builder.Services.AddScoped<ISubmissionService, SubmissionService>();
 // Add logging
 builder.Services.AddLogging();
 

@@ -971,88 +971,40 @@ namespace UniConnect.Repository
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
+                if (string.IsNullOrWhiteSpace(createSubjectDto.TeacherId))
                 {
-                    if (string.IsNullOrWhiteSpace(createSubjectDto.TeacherId))
-                    {
-                        throw new InvalidOperationException("TeacherId is required when creating a subject without a student group.");
-                    }
-
-                    var subject = new Subject
-                    {
-                        Name = createSubjectDto.Name,
-                        Code = createSubjectDto.Code,
-                        Description = createSubjectDto.Description,
-                        StudentGroupId = null,
-                        TeacherId = createSubjectDto.TeacherId,
-                        JoinCode = await GenerateUniqueJoinCodeAsync(),
-                        CreatedAt = DateTime.UtcNow,
-                        IsActive = true
-                    };
-
-                    _context.Subjects.Add(subject);
-                    await _context.SaveChangesAsync();
-
-                    if (!string.IsNullOrEmpty(subject.TeacherId))
-                    {
-                        await _context.Entry(subject)
-                            .Reference(s => s.Teacher)
-                            .LoadAsync();
-                    }
-
-                    try
-                    {
-                        await _communityService.GetOrCreateSubjectCommunityAsync(subject.Id);
-                        _logger.LogInformation("Automatically created subject community for subject: {SubjectName}", subject.Name);
-                    }
-                    catch (Exception commEx)
-                    {
-                        _logger.LogError(commEx, "Failed to automatically create community for subject: {SubjectName}", subject.Name);
-                    }
-
-                    return new SubjectDto
-                    {
-                        Id = subject.Id,
-                        Name = subject.Name,
-                        Code = subject.Code,
-                        Description = subject.Description,
-                        StudentGroupId = null,
-                        StudentGroupName = null,
-                        CourseId = null,
-                        CourseName = null,
-                        FacultyId = null,
-                        FacultyName = null,
-                        TeacherId = subject.TeacherId,
-                        TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
-                        JoinCode = subject.JoinCode,
-                        CreatedAt = subject.CreatedAt,
-                        IsActive = subject.IsActive
-                    };
+                    throw new InvalidOperationException("TeacherId is required for subject creation.");
                 }
 
-                // Verify student group exists
-                var group = await _context.StudentGroups
-                    .Include(g => g.Course)
-                    .ThenInclude(c => c.Faculty)
-                    .FirstOrDefaultAsync(g => g.Id == createSubjectDto.StudentGroupId && g.IsActive);
-
-                if (group == null)
+                StudentGroup? group = null;
+                if (!string.IsNullOrWhiteSpace(createSubjectDto.StudentGroupId))
                 {
-                    throw new InvalidOperationException($"Student group with ID '{createSubjectDto.StudentGroupId}' not found.");
+                    group = await _context.StudentGroups
+                        .Include(g => g.Course)
+                        .ThenInclude(c => c.Faculty)
+                        .FirstOrDefaultAsync(g => g.Id == createSubjectDto.StudentGroupId && g.IsActive);
+
+                    if (group == null)
+                    {
+                        throw new InvalidOperationException($"Student group with ID '{createSubjectDto.StudentGroupId}' not found.");
+                    }
                 }
 
-                // Check if subject code already exists in the same group
+                // Check subject code uniqueness (within group if provided, otherwise per teacher)
                 var existingSubject = await _context.Subjects
-                    .FirstOrDefaultAsync(s => s.Code == createSubjectDto.Code &&
-                                           s.StudentGroupId == createSubjectDto.StudentGroupId &&
-                                           s.IsActive);
+                    .FirstOrDefaultAsync(s =>
+                        s.IsActive &&
+                        s.Code == createSubjectDto.Code &&
+                        (createSubjectDto.StudentGroupId != null
+                            ? s.StudentGroupId == createSubjectDto.StudentGroupId
+                            : s.StudentGroupId == null && s.TeacherId == createSubjectDto.TeacherId));
 
                 if (existingSubject != null)
                 {
-                    throw new InvalidOperationException($"Subject with code '{createSubjectDto.Code}' already exists in this student group.");
+                    throw new InvalidOperationException("Subject with this code already exists for the selected scope.");
                 }
 
-                var groupedSubject = new Subject
+                var subject = new Subject
                 {
                     Name = createSubjectDto.Name,
                     Code = createSubjectDto.Code,
@@ -1064,56 +1016,56 @@ namespace UniConnect.Repository
                     IsActive = true
                 };
 
-                _context.Subjects.Add(groupedSubject);
+                _context.Subjects.Add(subject);
                 await _context.SaveChangesAsync();
 
                 // Reload with navigation
-                await _context.Entry(groupedSubject)
-                    .Reference(s => s.StudentGroup)
-                    .LoadAsync();
-
-                await _context.Entry(groupedSubject.StudentGroup)
-                    .Reference(g => g.Course)
-                    .LoadAsync();
-
-                await _context.Entry(groupedSubject.StudentGroup.Course)
-                    .Reference(c => c.Faculty)
-                    .LoadAsync();
-
-                if (!string.IsNullOrEmpty(groupedSubject.TeacherId))
+                if (subject.StudentGroupId != null)
                 {
-                    await _context.Entry(groupedSubject)
-                        .Reference(s => s.Teacher)
+                    await _context.Entry(subject)
+                        .Reference(s => s.StudentGroup)
+                        .LoadAsync();
+
+                    await _context.Entry(subject.StudentGroup!)
+                        .Reference(g => g.Course)
+                        .LoadAsync();
+
+                    await _context.Entry(subject.StudentGroup!.Course)
+                        .Reference(c => c.Faculty)
                         .LoadAsync();
                 }
 
+                await _context.Entry(subject)
+                    .Reference(s => s.Teacher)
+                    .LoadAsync();
+
                 try
                 {
-                    await _communityService.GetOrCreateSubjectCommunityAsync(groupedSubject.Id);
-                    _logger.LogInformation("Automatically created subject community for subject: {SubjectName}", groupedSubject.Name);
+                    await _communityService.GetOrCreateSubjectCommunityAsync(subject.Id);
+                    _logger.LogInformation("Automatically created subject community for subject: {SubjectName}", subject.Name);
                 }
                 catch (Exception commEx)
                 {
-                    _logger.LogError(commEx, "Failed to automatically create community for subject: {SubjectName}", groupedSubject.Name);
+                    _logger.LogError(commEx, "Failed to automatically create community for subject: {SubjectName}", subject.Name);
                 }
 
                 return new SubjectDto
                 {
-                    Id = groupedSubject.Id,
-                    Name = groupedSubject.Name,
-                    Code = groupedSubject.Code,
-                    Description = groupedSubject.Description,
-                    StudentGroupId = groupedSubject.StudentGroupId,
-                    StudentGroupName = groupedSubject.StudentGroup?.Name,
-                    CourseId = groupedSubject.StudentGroup?.CourseId,
-                    CourseName = groupedSubject.StudentGroup?.Course?.Name,
-                    FacultyId = groupedSubject.StudentGroup?.Course?.FacultyId,
-                    FacultyName = groupedSubject.StudentGroup?.Course?.Faculty?.Name,
-                    TeacherId = groupedSubject.TeacherId,
-                    TeacherName = groupedSubject.Teacher != null ? $"{groupedSubject.Teacher.FirstName} {groupedSubject.Teacher.LastName}" : null,
-                    JoinCode = groupedSubject.JoinCode,
-                    CreatedAt = groupedSubject.CreatedAt,
-                    IsActive = groupedSubject.IsActive
+                    Id = subject.Id,
+                    Name = subject.Name,
+                    Code = subject.Code,
+                    Description = subject.Description,
+                    StudentGroupId = subject.StudentGroupId,
+                    StudentGroupName = subject.StudentGroup?.Name,
+                    CourseId = subject.StudentGroup?.CourseId,
+                    CourseName = subject.StudentGroup?.Course?.Name,
+                    FacultyId = subject.StudentGroup?.Course?.FacultyId,
+                    FacultyName = subject.StudentGroup?.Course?.Faculty?.Name,
+                    TeacherId = subject.TeacherId,
+                    TeacherName = subject.Teacher != null ? $"{subject.Teacher.FirstName} {subject.Teacher.LastName}" : null,
+                    JoinCode = subject.JoinCode,
+                    CreatedAt = subject.CreatedAt,
+                    IsActive = subject.IsActive
                 };
             }
             catch (Exception ex)
